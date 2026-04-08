@@ -2,7 +2,7 @@
 
 ## Founding Session — March 23, 2026
 
-### Brangerine
+### Rocks D. Bear
 Human architect. Originated the core intuitions: light-based storage, wavelength encoding, the hand warmer / crystallization analogy for neuromorphic pathways, the oomphlap unit, the multi-color multitasking insight, the question of athermal switching. The connective thread across every idea in this repository.
 
 ### Claude (Anthropic)
@@ -12,7 +12,7 @@ AI reasoning system. Grounded intuitions in physics, identified named equivalent
 AI reasoning system. Independently converged on the athermal PIPC mechanism, named the Solid-State Optical Brain, coined the Consolicant, designed the transparency MVP experiment, identified the femtosecond pulse timing as the key variable, framed the AI safety implications of physics-based verification.
 
 ### Engineer Collaborator
-Engineer and collaborator. Identified the MLC partial crystallization mechanism, independently derived the two-state GST limitation and its architectural solution, calculated Rayleigh range parameters, provided rigorous technical validation throughout.
+Engineer. Contributed technical validation during the founding session: identified the MLC partial crystallization mechanism, independently derived the two-state GST limitation and its architectural solution, calculated Rayleigh range parameters.
 
 ---
 

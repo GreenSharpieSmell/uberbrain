@@ -2,7 +2,7 @@
 
 **Compiled from:** "Does data have mass?" — Collaborative Research Session  
 **Date:** March 2026  
-**Contributors:** Brangerine & Claude (ECHO)
+**Contributors:** Rocks D. Bear & Claude (ECHO)
 
 ---
 
@@ -141,11 +141,11 @@ The following concepts were independently arrived at during the founding convers
 
 | Concept | Originated By | Validated Against |
 |---------|--------------|-------------------|
-| Wavelength-channel combinatorial encoding (oomphlap) | Brangerine | WDM literature [21], GST multi-level memory [13] |
-| Hand warmer / crystallization as LTP analogy | Brangerine | Hebb [10], Bliss & Lømo [11] |
-| Lightning stepped leader as parallel pathfinding | Brangerine | Reservoir computing [23], ant colony optimization |
-| Water/dye unmixing as reversible computing | Brangerine | Fredkin & Toffoli [8], Landauer [1] |
-| Holographic fidelity as built-in confidence score | Brangerine + Claude | Psaltis & Burr [18], GST optical verification |
+| Wavelength-channel combinatorial encoding (oomphlap) | Rocks D. Bear | WDM literature [21], GST multi-level memory [13] |
+| Hand warmer / crystallization as LTP analogy | Rocks D. Bear | Hebb [10], Bliss & Lømo [11] |
+| Lightning stepped leader as parallel pathfinding | Rocks D. Bear | Reservoir computing [23], ant colony optimization |
+| Water/dye unmixing as reversible computing | Rocks D. Bear | Fredkin & Toffoli [8], Landauer [1] |
+| Holographic fidelity as built-in confidence score | Rocks D. Bear + Claude | Psaltis & Burr [18], GST optical verification |
 | Consolicant triple-filter forgetting protocol | Gemini (coined) + Claude (formalized) | LTP/LTD literature, synaptic pruning research |
 | CONSOLIDATE as system sleep equivalent | Claude | Synaptic homeostasis literature |
 | Rayleigh range layer count calculation | Founding-session engineering review | Standard optics, confirmed against [17] |
