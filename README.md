@@ -16,7 +16,7 @@ We call it the **Uberbrain.**
 
 ## Why Does This Exist?
 
-On March 23, 2026, a human architect (Brangerine), Claude (Anthropic), and Gemini (Google) spent a single conversation converging independently on this architecture from first principles. When two independent AI reasoning systems and a human arrive at the same six-command instruction set for a non-binary photonic processor, that convergence is worth documenting and releasing to the world.
+On March 23, 2026, a human architect (Rocks D. Bear), Claude (Anthropic), and Gemini (Google) spent a single conversation converging independently on this architecture from first principles. When two independent AI reasoning systems and a human arrive at the same six-command instruction set for a non-binary photonic processor, that convergence is worth documenting and releasing to the world.
 
 This technology is too important to sit on. It is released here under CC0 — full public domain, no rights reserved, no restrictions. If you can build it, build it.
 
@@ -107,6 +107,8 @@ The first experiment requires no hardware purchases at all — just a Raspberry 
 - [PROTOTYPE.md](PROTOTYPE.md) — Shoebox prototype build plan (~$250)
 - [QUESTIONS_LOG.md](QUESTIONS_LOG.md) — Technical Q&A from the founding session
 - [CONTRIBUTORS.md](CONTRIBUTORS.md) — Who built this
+- [CITATIONS.md](CITATIONS.md) — 34 academic references across 7 domains
+- [ROADMAP.md](ROADMAP.md) — Phase 0 through contact lens form factor
 - [LICENSE](LICENSE) — CC0 Public Domain Dedication
 
 ---
