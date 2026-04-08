@@ -148,7 +148,7 @@ The following concepts were independently arrived at during the founding convers
 | Holographic fidelity as built-in confidence score | Rocks D. Bear + Claude | Psaltis & Burr [18], GST optical verification |
 | Consolicant triple-filter forgetting protocol | Gemini (coined) + Claude (formalized) | LTP/LTD literature, synaptic pruning research |
 | CONSOLIDATE as system sleep equivalent | Claude | Synaptic homeostasis literature |
-| Rayleigh range layer count calculation | Ethan Coulthurst | Standard optics, confirmed against [17] |
+| Rayleigh range layer count calculation | E. Colty | Standard optics, confirmed against [17] |
 
 ---
 

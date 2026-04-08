@@ -15,7 +15,7 @@ Germanium Antimony Telluride switches between amorphous (disordered) and crystal
 - High-power pulse writes. Low-power pulse reads without disturbing state.
 - Commercial analog (AgInSbTe) is in every rewritable Blu-ray disc today.
 
-**MLC extension (Ethan Coulthurst):** Partial crystallization produces intermediate resistance states — identical mechanism to MLC/TLC/QLC in flash storage. A single GST cell can store 2–4 bits via partial crystallization, independent of any wavelength tricks.
+**MLC extension (E. Colty):** Partial crystallization produces intermediate resistance states — identical mechanism to MLC/TLC/QLC in flash storage. A single GST cell can store 2–4 bits via partial crystallization, independent of any wavelength tricks.
 
 ---
 
@@ -78,7 +78,7 @@ Layer spacing:   2 × z_R ≈ 3.8 μm (theoretical minimum)
 
 2,000 layers × full 5D areal density per layer = petabyte territory.
 
-*(Calculation: Ethan Coulthurst, 2026-03-23)*
+*(Calculation: E. Colty, 2026-03-23)*
 
 ---
 

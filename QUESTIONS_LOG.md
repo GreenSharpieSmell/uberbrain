@@ -6,7 +6,7 @@ Technical questions and answers from the founding session and ongoing developmen
 
 ## Founding Session — March 23, 2026
 
-**Q (Ethan Coulthurst):** How many discrete layers do we get with a 10mm thick crystal due to the Rayleigh range?
+**Q (E. Colty):** How many discrete layers do we get with a 10mm thick crystal due to the Rayleigh range?
 
 **A (Claude):** Using 1030nm femtosecond write laser at NA 0.5 in fused quartz (n=1.46):
 - Beam waist w₀ ≈ 656nm

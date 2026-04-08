@@ -161,7 +161,7 @@ At this scale: petabyte capacity, full AI model inference, near-zero heat, no ex
 ### With Lab Access
 - Phase 5 GST integration
 - Athermal PIPC verification
-- Adaptive optics layer count validation (Ethan's Rayleigh calculation)
+- Adaptive optics layer count validation (E. Colty's Rayleigh calculation)
 
 ### With Funding
 - Formal preprint on arXiv
