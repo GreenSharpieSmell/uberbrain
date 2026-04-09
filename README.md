@@ -135,11 +135,12 @@ The simulations demonstrate the mathematical basis of the architecture. The next
 - [CONTRIBUTORS.md](CONTRIBUTORS.md) — Who built this
 - [CITATIONS.md](CITATIONS.md) — 34 academic references across 7 domains
 - [VALIDATION_SPEC.md](VALIDATION_SPEC.md) — Formal validation spec (Codex)
+- [validation/](validation/) — Benchmark configs, SOPs, records, and change-control artifacts
 - [CLAIMS.md](CLAIMS.md) — 15 falsifiable claims with evidence levels
 - [SIM_LIMITATIONS.md](SIM_LIMITATIONS.md) — Honest catalogue of what simulations do not prove
 - [templates/](templates/) — Collaboration templates for handoffs, decisions, experiments, claims, and red-team review
 - [SPECIFICATIONS.md](SPECIFICATIONS.md) — Engineering KPIs and falsification criteria
-- [sim/](sim/) — Python simulations — all six commands verified
+- [sim/](sim/) — Python simulations — current evidence summarized in CLAIMS.md
 - [LICENSE](LICENSE) — CC0 Public Domain Dedication
 
 ---
