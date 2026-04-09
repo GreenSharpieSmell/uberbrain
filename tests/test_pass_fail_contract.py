@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 import sys
 sys.path.insert(0, str(ROOT / "sim" / "benchmarks"))
 
-import metrics as bench_metrics
+import bench_metrics
 
 
 # ─────────────────────────────────────────────────────────────────────────────

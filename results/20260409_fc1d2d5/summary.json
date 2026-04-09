@@ -1,0 +1,140 @@
+{
+  "run_id": "20260409_fc1d2d5",
+  "git_sha": "fc1d2d5",
+  "claims": {
+    "c1_sim1_verify": {
+      "metrics": {
+        "roc_auc": 1.0,
+        "mse_baseline_auc": 1.0,
+        "ssim_vs_mse_auc_delta": 0.0,
+        "fnr_at_threshold": 0.75,
+        "ssim_delta": 0.192435,
+        "adaptive_threshold": 0.903783,
+        "n_trials": 20,
+        "seed": 42
+      },
+      "gates": {
+        "roc_auc": {
+          "status": "PASS",
+          "reason": "1.000000 >= 0.9 \u2192 PASS",
+          "measured": 1.0,
+          "threshold": 0.9,
+          "op": ">="
+        },
+        "fnr_at_threshold": {
+          "status": "PASS",
+          "reason": "0.750000 <= 0.8 \u2192 PASS",
+          "measured": 0.75,
+          "threshold": 0.8,
+          "op": "<="
+        },
+        "ssim_vs_mse_auc_delta": {
+          "status": "PASS",
+          "reason": "0.000000 >= 0.0 \u2192 PASS",
+          "measured": 0.0,
+          "threshold": 0.0,
+          "op": ">="
+        }
+      },
+      "status": "PASS"
+    },
+    "c2_sim2_oomphlap": {
+      "metrics": {
+        "ber_at_sigma_0p05": 0.0,
+        "state_accuracy_at_sigma_0p05": 1.0,
+        "effective_capacity_gain_vs_single_channel": 4.0
+      },
+      "gates": {
+        "ber_at_sigma_0p05": {
+          "status": "PASS",
+          "reason": "0.000000 <= 0.01 \u2192 PASS",
+          "measured": 0.0,
+          "threshold": 0.01,
+          "op": "<="
+        },
+        "state_accuracy_at_sigma_0p05": {
+          "status": "PASS",
+          "reason": "1.000000 >= 0.99 \u2192 PASS",
+          "measured": 1.0,
+          "threshold": 0.99,
+          "op": ">="
+        },
+        "effective_capacity_gain_vs_single_channel": {
+          "status": "PASS",
+          "reason": "4.000000 >= 1.25 \u2192 PASS",
+          "measured": 4.0,
+          "threshold": 1.25,
+          "op": ">="
+        }
+      },
+      "status": "PASS"
+    },
+    "c3_sim3_consolicant": {
+      "metrics": {
+        "n_nodes": 300,
+        "n_bleach": 54,
+        "n_repair": 19,
+        "n_protected": 227,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "triple_regret": 8.662457,
+        "age_only_regret": 15.674312,
+        "regret_ratio_vs_age_only": 0.552653,
+        "retained_value_triple": 2.068642,
+        "retained_value_random": 1.81131,
+        "retained_value_vs_random": 1.14207,
+        "seed": 42
+      },
+      "gates": {
+        "f1": {
+          "status": "PASS",
+          "reason": "1.000000 >= 0.8 \u2192 PASS",
+          "measured": 1.0,
+          "threshold": 0.8,
+          "op": ">="
+        },
+        "regret_ratio_vs_age_only": {
+          "status": "PASS",
+          "reason": "0.552653 <= 0.6 \u2192 PASS",
+          "measured": 0.552653,
+          "threshold": 0.6,
+          "op": "<="
+        },
+        "retained_value_vs_random": {
+          "status": "PASS",
+          "reason": "1.142070 >= 1.1 \u2192 PASS",
+          "measured": 1.14207,
+          "threshold": 1.1,
+          "op": ">="
+        }
+      },
+      "status": "PASS"
+    },
+    "c4_sim4_pipeline": {
+      "metrics": {
+        "uplift_vs_each_ablation": 0.0,
+        "min_success_rate": 0.95,
+        "n_trials": 20
+      },
+      "gates": {
+        "uplift_vs_each_ablation": {
+          "status": "PASS",
+          "reason": "0.000000 >= 0.0 \u2192 PASS",
+          "measured": 0.0,
+          "threshold": 0.0,
+          "op": ">="
+        },
+        "min_success_rate": {
+          "status": "PASS",
+          "reason": "0.950000 >= 0.9 \u2192 PASS",
+          "measured": 0.95,
+          "threshold": 0.9,
+          "op": ">="
+        }
+      },
+      "status": "PASS"
+    }
+  },
+  "overall_status": "PASS"
+}
