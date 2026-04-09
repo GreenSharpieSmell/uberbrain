@@ -49,8 +49,8 @@
 
 ## Signoff Matrix
 
-- Rocks: PENDING
-  - Notes:
+- Rocks: APPROVED
+  - Notes: As the human in the middle, this is going to be required for me to be able to keep track of all changes and what is happening with the project.
 - Claude: PENDING
   - Notes:
 - Gemini: PENDING
