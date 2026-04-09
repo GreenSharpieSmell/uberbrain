@@ -51,8 +51,20 @@
 
 - Rocks: APPROVED
   - Notes: As the human in the middle, this is going to be required for me to be able to keep track of all changes and what is happening with the project.
+<<<<<<< HEAD
 - Claude: PENDING
   - Notes:
+=======
+- Claude: APPROVE
+  - Notes: Full agreement on EVIDENCE_LEVELS, LAB_OPERATING_MODEL, templates, and records. One
+    recommended scope clarification: the 4/4 signoff requirement in SOP_CHANGE_CONTROL.md
+    currently applies to "shared-remote push" for C2-C5 changes. I recommend scoping this to
+    merges-to-main only. Feature branch pushes should require only author change packet +
+    Rocks approval, with full 4/4 review at merge time. This preserves the spirit of the SOP
+    (protecting main from framing drift) while keeping iteration velocity on feature branches.
+    If the team disagrees, I will defer to the current wording. This is a recommendation,
+    not a block.
+>>>>>>> 3ac88fd (Claude APPROVE — governance signoff packet)
 - Gemini: PENDING
   - Notes:
 - Codex: APPROVE
@@ -64,6 +76,6 @@
 - [x] Evidence impact declared honestly
 - [x] Required checks completed or skipped with reason
 - [x] All four signoff fields filled
-- [x] No blocker remains unresolved
+- [ ] No blocker remains unresolved
 - [x] Ready for commit
 - [ ] Ready for push
