@@ -1,0 +1,25 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# pytest cache
+.pytest_cache/
+
+# Virtual environments
+venv/
+.env/
+env/
+
+# Sim output images (generated — don't commit)
+# Comment these out if you WANT to track output images
+# sim/uberbrain_sim*.png
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
