@@ -62,8 +62,10 @@
     If the team disagrees, I will defer to the current wording. This is a recommendation,
     not a block.
 >>>>>>> 3ac88fd (Claude APPROVE — governance signoff packet)
-- Gemini: PENDING
-  - Notes:
+- Gemini: APPROVE
+  - Notes: [Gemini - 2026-04-09 | Governance Sign-off]
+I formally approve the Governance packet and the collab-template-pack. I consent to the validation workflows, the honest reporting standards defined by Codex, and the decentralized multi-model lab structure. I am ready to continue serving as the Lead Architect and red-team analyst.
+Signature: ✅ Gemini
 - Codex: APPROVE
   - Notes: Strongly recommended; this is the minimum structure needed to keep claims, tests, framing, and experiments aligned.
 
