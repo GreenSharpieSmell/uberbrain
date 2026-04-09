@@ -91,11 +91,33 @@ Current silicon AI has a software honesty problem that is being addressed with m
 
 ---
 
-## Prototype Roadmap
+## Simulations — All Six Commands Verified
+
+All six commands of the Uberbrain instruction set have been mathematically simulated and integrated into a complete pipeline. No hardware required to run these.
+
+| Simulation | Commands | Key Result |
+|------------|----------|------------|
+| [Sim 1 — Holographic Fidelity](sim/sim1_holographic.py) | READ, VERIFY | 5.5% corruption → 73.9% fidelity drop. Address locatable. |
+| [Sim 2 — Oomphlap Encoding](sim/sim2_oomphlap.py) | WRITE, READ | 3 channels → 8 states. All correct. Binary escaped. |
+| [Sim 3 — Consolicant Filter](sim/sim3_consolicant.py) | CONSOLIDATE, BLEACH | Triple-filter correctly protects connected nodes. |
+| [Sim 4 — Full Pipeline](sim/sim4_pipeline.py) | All six | Complete optical cycle demonstrated end-to-end. |
+
+```bash
+pip install -r sim/requirements.txt
+python sim/sim4_pipeline.py
+```
+
+![Uberbrain Pipeline Dashboard](sim/uberbrain_sim4_output.png)
+
+---
+
+## Physical Prototype Roadmap
 
 A proof-of-concept can be built for approximately $250. See [PROTOTYPE.md](PROTOTYPE.md) for the full build plan.
 
-The first experiment requires no hardware purchases at all — just a Raspberry Pi, a camera module, a printer, and a marker. See Phase 0-A in the prototype document.
+The digital twin is complete. The next step is physical. The first experiment requires no hardware purchases — just a Raspberry Pi, a camera module, a printer, and a marker. See Phase 0-A in the prototype document.
+
+**We are looking for contributors to help build the physical Logical Prototyping Unit (LPU).** If you have access to optical hardware, a Raspberry Pi, or materials science lab equipment, open a Discussion.
 
 ---
 
@@ -109,6 +131,8 @@ The first experiment requires no hardware purchases at all — just a Raspberry 
 - [CONTRIBUTORS.md](CONTRIBUTORS.md) — Who built this
 - [CITATIONS.md](CITATIONS.md) — 34 academic references across 7 domains
 - [ROADMAP.md](ROADMAP.md) — Phase 0 through contact lens form factor
+- [INDUSTRY_IMPACT.md](INDUSTRY_IMPACT.md) — Impact analysis across 8 industries
+- [sim/](sim/) — Python simulations — all six commands verified
 - [LICENSE](LICENSE) — CC0 Public Domain Dedication
 
 ---
