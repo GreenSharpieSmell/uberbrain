@@ -26,9 +26,9 @@ import sys
 sys.path.insert(0, str(ROOT / "sim" / "benchmarks"))
 sys.path.insert(0, str(ROOT / "sim"))
 
-import io as bench_io
-import metrics as bench_metrics
-import baselines as bench_baselines
+import bench_io
+import bench_metrics
+import bench_baselines
 import adversarial as bench_adv
 
 
