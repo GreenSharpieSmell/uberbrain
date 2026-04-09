@@ -11,6 +11,8 @@ Use these templates when a change needs to survive beyond chat.
 - `EXPERIMENT_RUN_SHEET_TEMPLATE.md` — benchtop or simulation experiment setup plus pass/fail
 - `BENCHMARK_REPORT_TEMPLATE.md` — claim-level benchmark results
 - `CLAIM_CHANGE_TEMPLATE.md` — any edit to a formal claim, threshold, or evidence label
+- `CHANGE_PACKET_TEMPLATE.md` — mandatory pre-git scope, evidence, and signoff packet
+- `EXCEPTION_WAIVER_TEMPLATE.md` — controlled bypass for emergency changes
 - `RED_TEAM_FINDING_TEMPLATE.md` — skeptical reviewer objections and mitigations
 
 ## Working Rule
