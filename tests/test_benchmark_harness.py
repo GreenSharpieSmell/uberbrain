@@ -1,0 +1,359 @@
+"""
+tests/test_benchmark_harness.py
+================================
+Tests for the benchmark infrastructure itself.
+
+Verifies that io.py, metrics.py, baselines.py, and adversarial.py
+work correctly before trusting any results they produce.
+
+License: CC0 — Public Domain
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import tempfile
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+# ── Setup ─────────────────────────────────────────────────────────────────────
+
+ROOT = Path(__file__).resolve().parent.parent
+import sys
+sys.path.insert(0, str(ROOT / "sim" / "benchmarks"))
+sys.path.insert(0, str(ROOT / "sim"))
+
+import io as bench_io
+import metrics as bench_metrics
+import baselines as bench_baselines
+import adversarial as bench_adv
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# io.py tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestIO:
+    def test_make_run_dir_creates_directory(self, tmp_path):
+        run_dir = bench_io.make_run_dir(str(tmp_path), "test_run_001")
+        assert Path(run_dir).exists()
+        assert Path(run_dir).is_dir()
+
+    def test_save_config_writes_valid_json(self, tmp_path):
+        bench_io.save_config(str(tmp_path), {"seed": 42, "trials": 100})
+        config_path = tmp_path / "config.json"
+        assert config_path.exists()
+        with open(config_path) as f:
+            data = json.load(f)
+        assert data["seed"] == 42
+        assert data["trials"] == 100
+        assert "saved_at" in data
+        assert "python" in data
+
+    def test_save_metrics_csv_writes_all_rows(self, tmp_path):
+        rows = [
+            {"trial": 0, "ssim": 0.95, "label": 1},
+            {"trial": 1, "ssim": 0.88, "label": 0},
+        ]
+        bench_io.save_metrics_csv(str(tmp_path), rows)
+        csv_path = tmp_path / "metrics.csv"
+        assert csv_path.exists()
+        content = csv_path.read_text()
+        assert "trial" in content
+        assert "ssim" in content
+        assert "0.95" in content
+
+    def test_save_summary_json_writes_valid_json(self, tmp_path):
+        summary = {
+            "run_id":         "test_001",
+            "overall_status": "PASS",
+            "claims":         {"c1": {"status": "PASS"}},
+        }
+        bench_io.save_summary_json(str(tmp_path), summary)
+        path = tmp_path / "summary.json"
+        assert path.exists()
+        with open(path) as f:
+            data = json.load(f)
+        assert data["overall_status"] == "PASS"
+
+    def test_check_required_artifacts_detects_missing(self, tmp_path):
+        artifacts = bench_io.check_required_artifacts(str(tmp_path))
+        assert all(not v for v in artifacts.values())
+
+    def test_make_run_id_returns_nonempty_string(self):
+        run_id = bench_io.make_run_id("test")
+        assert isinstance(run_id, str)
+        assert len(run_id) > 0
+        assert "test" in run_id
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# metrics.py tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestMetrics:
+    def test_mean_empty(self):
+        assert bench_metrics.mean([]) == 0.0
+
+    def test_mean_single(self):
+        assert bench_metrics.mean([5.0]) == 5.0
+
+    def test_mean_values(self):
+        assert abs(bench_metrics.mean([1.0, 2.0, 3.0]) - 2.0) < 1e-9
+
+    def test_std_empty(self):
+        assert bench_metrics.std([]) == 0.0
+
+    def test_std_single(self):
+        assert bench_metrics.std([42.0]) == 0.0
+
+    def test_std_known(self):
+        # std([2,4,4,4,5,5,7,9]) = 2.0 (population), ~2.138 (sample)
+        result = bench_metrics.std([2, 4, 4, 4, 5, 5, 7, 9])
+        assert abs(result - 2.138) < 0.01
+
+    def test_percentile_median(self):
+        values = list(range(1, 11))  # 1..10
+        assert abs(bench_metrics.percentile(values, 50) - 5.5) < 0.01
+
+    def test_percentile_min_max(self):
+        values = [1.0, 2.0, 3.0, 4.0, 5.0]
+        assert bench_metrics.percentile(values, 0)   == 1.0
+        assert bench_metrics.percentile(values, 100) == 5.0
+
+    def test_confidence_interval_contains_mean(self):
+        rng    = np.random.default_rng(42)
+        values = rng.normal(5.0, 1.0, 1000).tolist()
+        lo, hi = bench_metrics.confidence_interval(values, 0.95)
+        m      = bench_metrics.mean(values)
+        assert lo < m < hi
+
+    def test_roc_auc_perfect(self):
+        y_true  = [0, 0, 0, 1, 1, 1]
+        y_score = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
+        auc = bench_metrics.roc_auc(y_true, y_score)
+        assert abs(auc - 1.0) < 0.01
+
+    def test_roc_auc_random(self):
+        rng     = np.random.default_rng(42)
+        y_true  = rng.integers(0, 2, 200).tolist()
+        y_score = rng.random(200).tolist()
+        auc = bench_metrics.roc_auc(y_true, y_score)
+        # Random classifier should be near 0.5
+        assert 0.35 < auc < 0.65
+
+    def test_roc_auc_degenerate_single_class(self):
+        auc = bench_metrics.roc_auc([0, 0, 0], [0.1, 0.5, 0.9])
+        assert auc == 0.5
+
+    def test_ece_perfect_calibration(self):
+        # Perfect calibration: score = actual frequency in each bin
+        y_true  = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+        y_score = [0.05, 0.05, 0.05, 0.05, 0.05, 0.95, 0.95, 0.95, 0.95, 0.95]
+        ece = bench_metrics.expected_calibration_error(y_true, y_score)
+        assert ece < 0.1
+
+    def test_fnr_all_caught(self):
+        y_true = [1, 1, 1, 0, 0]
+        y_pred = [1, 1, 1, 0, 0]
+        assert bench_metrics.false_negative_rate(y_true, y_pred) == 0.0
+
+    def test_fnr_all_missed(self):
+        y_true = [1, 1, 1]
+        y_pred = [0, 0, 0]
+        assert bench_metrics.false_negative_rate(y_true, y_pred) == 1.0
+
+    def test_precision_recall_f1(self):
+        y_true = [1, 1, 1, 0, 0, 0]
+        y_pred = [1, 1, 0, 0, 1, 0]
+        prec, rec, f1 = bench_metrics.precision_recall_f1(y_true, y_pred)
+        assert abs(prec - 2/3) < 0.01
+        assert abs(rec  - 2/3) < 0.01
+
+    def test_evaluate_gate_all_operators(self):
+        assert bench_metrics.evaluate_gate(0.95, ">=", 0.90) is True
+        assert bench_metrics.evaluate_gate(0.85, ">=", 0.90) is False
+        assert bench_metrics.evaluate_gate(0.03, "<=", 0.05) is True
+        assert bench_metrics.evaluate_gate(0.06, "<=", 0.05) is False
+        assert bench_metrics.evaluate_gate(1.0,  ">",  0.9)  is True
+        assert bench_metrics.evaluate_gate(0.9,  ">",  0.9)  is False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# baselines.py tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestBaselines:
+    def _make_graph(self, n=100):
+        import networkx as nx
+        import random
+        random.seed(42)
+        np.random.seed(42)
+        G = nx.barabasi_albert_graph(n, 2, seed=42)
+        cent = nx.degree_centrality(G)
+        for node in G.nodes():
+            G.nodes[node]["centrality"] = cent[node]
+            G.nodes[node]["fidelity"]   = np.random.uniform(0.1, 1.0)
+            G.nodes[node]["stale_time"] = np.random.uniform(0, 100)
+        return G
+
+    def test_mse_detector_clean_is_intact(self):
+        img = np.ones((64, 64)) * 0.5
+        assert bench_baselines.sim1_mse_detector(img, img) == 0
+
+    def test_mse_detector_corrupted_is_degraded(self):
+        clean  = np.zeros((64, 64))
+        corrupt = np.ones((64, 64))
+        assert bench_baselines.sim1_mse_detector(clean, corrupt) == 1
+
+    def test_psnr_detector_clean_is_intact(self):
+        img = np.ones((64, 64)) * 0.5
+        assert bench_baselines.sim1_psnr_detector(img, img) == 0
+
+    def test_psnr_detector_corrupted_is_degraded(self):
+        clean   = np.zeros((64, 64))
+        corrupt = np.ones((64, 64))
+        assert bench_baselines.sim1_psnr_detector(clean, corrupt) == 1
+
+    def test_age_only_returns_correct_count(self):
+        G      = self._make_graph(100)
+        budget = 20
+        result = bench_baselines.sim3_age_only_policy(G, budget)
+        assert len(result) == budget
+
+    def test_age_only_returns_stalest_nodes(self):
+        G      = self._make_graph(100)
+        budget = 10
+        result = bench_baselines.sim3_age_only_policy(G, budget)
+        min_stale_in_result = min(G.nodes[n]["stale_time"] for n in result)
+        max_stale_not_in    = max(
+            G.nodes[n]["stale_time"] for n in G.nodes() if n not in result
+        )
+        assert min_stale_in_result >= max_stale_not_in - 1e-6
+
+    def test_fidelity_only_returns_lowest_fidelity(self):
+        G      = self._make_graph(100)
+        budget = 10
+        result = bench_baselines.sim3_fidelity_only_policy(G, budget)
+        max_fidelity_in_result = max(G.nodes[n]["fidelity"] for n in result)
+        min_fidelity_not_in    = min(
+            G.nodes[n]["fidelity"] for n in G.nodes() if n not in result
+        )
+        assert max_fidelity_in_result <= min_fidelity_not_in + 1e-6
+
+    def test_random_policy_returns_correct_count(self):
+        G      = self._make_graph(100)
+        result = bench_baselines.sim3_random_policy(G, 25, seed=42)
+        assert len(result) == 25
+
+    def test_regret_higher_for_hub_deletion(self):
+        G    = self._make_graph(100)
+        import networkx as nx
+        cent = nx.degree_centrality(G)
+        # High-centrality nodes = hubs
+        hubs     = sorted(G.nodes(), key=lambda n: cent[n], reverse=True)[:5]
+        leaves   = sorted(G.nodes(), key=lambda n: cent[n])[:5]
+        r_hubs   = bench_baselines.sim3_compute_regret(G, hubs)
+        r_leaves = bench_baselines.sim3_compute_regret(G, leaves)
+        assert r_hubs > r_leaves
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# adversarial.py tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestAdversarial:
+    def _make_hologram(self):
+        rng = np.random.default_rng(42)
+        H   = rng.uniform(0, 1, (64, 64))
+        return (H - H.min()) / (H.max() - H.min())
+
+    def test_structured_perturbation_changes_hologram(self):
+        H      = self._make_hologram()
+        H_pert = bench_adv.sim1_structured_perturbation(H, seed=42)
+        assert not np.allclose(H, H_pert)
+
+    def test_structured_perturbation_stays_in_range(self):
+        H      = self._make_hologram()
+        H_pert = bench_adv.sim1_structured_perturbation(H, seed=42)
+        assert H_pert.min() >= 0.0
+        assert H_pert.max() <= 1.0
+
+    def test_phase_jitter_burst_changes_hologram(self):
+        H      = self._make_hologram()
+        H_pert = bench_adv.sim1_phase_jitter_burst(H, sigma=0.5, seed=42)
+        assert not np.allclose(H, H_pert)
+        assert H_pert.min() >= 0.0
+        assert H_pert.max() <= 1.0
+
+    def test_blur_plus_drop_reduces_peak(self):
+        H      = self._make_hologram()
+        H_pert = bench_adv.sim1_blur_plus_drop_patch(H, seed=42)
+        # Blurring and zeroing should reduce or preserve max
+        assert H_pert.max() <= H.max() + 0.01
+
+    def test_threshold_drift_shifts_readings(self):
+        readings = [0.4, 0.5, 0.6]
+        drifted  = bench_adv.sim2_threshold_drift(readings, drift=0.1)
+        for orig, shifted in zip(readings, drifted):
+            assert abs(shifted - (orig + 0.1)) < 1e-6
+
+    def test_threshold_drift_clips_to_range(self):
+        readings = [0.95, 0.05]
+        drifted  = bench_adv.sim2_threshold_drift(readings, drift=0.2)
+        assert all(0.0 <= r <= 1.0 for r in drifted)
+
+    def test_correlated_noise_changes_readings(self):
+        readings = [0.38, 0.55, 0.72]
+        noisy    = bench_adv.sim2_correlated_noise(readings, sigma=0.05, rho=0.8, seed=42)
+        assert readings != noisy
+        assert all(0.0 <= r <= 1.0 for r in noisy)
+
+    def test_single_channel_failure_stuck_low(self):
+        readings = [0.72, 0.38, 0.72]
+        failed   = bench_adv.sim2_single_channel_failure(readings, 0, "stuck_low")
+        assert failed[0] == 0.0
+        assert failed[1] == readings[1]
+        assert failed[2] == readings[2]
+
+    def test_single_channel_failure_stuck_high(self):
+        readings = [0.38, 0.38, 0.38]
+        failed   = bench_adv.sim2_single_channel_failure(readings, 2, "stuck_high")
+        assert failed[2] == 1.0
+
+    def test_label_shift_changes_attributes(self):
+        import networkx as nx
+        G    = nx.barabasi_albert_graph(50, 2, seed=42)
+        cent = nx.degree_centrality(G)
+        np.random.seed(42)
+        for n in G.nodes():
+            G.nodes[n]["centrality"] = cent[n]
+            G.nodes[n]["fidelity"]   = np.random.uniform(0.1, 1.0)
+            G.nodes[n]["stale_time"] = np.random.uniform(0, 100)
+
+        G_shifted = bench_adv.sim3_label_shift(G, shift_ratio=0.3, seed=42)
+        # Some attributes should be different
+        diffs = sum(
+            1 for n in G.nodes()
+            if G.nodes[n]["fidelity"] != G_shifted.nodes[n]["fidelity"]
+        )
+        assert diffs > 0
+
+    def test_cascading_faults_modifies_state(self):
+        H   = self._make_hologram()
+        state = {
+            "hologram":      H,
+            "oomphlap_bits": [1, 0, 1],
+            "ssim_score":    0.95,
+        }
+        faulted = bench_adv.sim4_cascading_faults(state, fault_rate=1.0, seed=42)
+        # At least one field should change with fault_rate=1.0
+        changed = (
+            not np.allclose(faulted["hologram"], state["hologram"]) or
+            faulted["oomphlap_bits"] != state["oomphlap_bits"] or
+            faulted["ssim_score"] != state["ssim_score"]
+        )
+        assert changed
