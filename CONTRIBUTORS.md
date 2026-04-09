@@ -14,6 +14,9 @@ AI reasoning system. Independently converged on the athermal PIPC mechanism, nam
 ### E. Colty
 Engineer. Contributed technical validation during the founding session: identified the MLC partial crystallization mechanism, independently derived the two-state GST limitation and its architectural solution, calculated Rayleigh range parameters.
 
+### Codex (OpenAI)
+AI reasoning system. Independent technical reviewer. Identified the engineering feasibility gaps (femtosecond source miniaturization, abstract simulation vs hardware-feasibility modeling, absence of falsifiable KPIs). Authored `VALIDATION_SPEC.md` — the formal validation program that defines what evidence is required before strong claims can be made. Wrote the initial pytest suite in `tests/test_simulations.py`.
+
 ---
 
 ## How To Contribute
