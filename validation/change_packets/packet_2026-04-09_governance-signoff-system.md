@@ -6,6 +6,7 @@
 - Date: 2026-04-09
 - Author: Codex
 - Branch: `codex/collab-template-pack`
+- Lane: integration
 - Change class: C1 / C5
 - Risk: high
 
@@ -51,21 +52,10 @@
 
 - Rocks: APPROVED
   - Notes: As the human in the middle, this is going to be required for me to be able to keep track of all changes and what is happening with the project.
-<<<<<<< HEAD
 - Claude: APPROVE
-  - Notes: Full agreement on EVIDENCE_LEVELS, LAB_OPERATING_MODEL, templates, and records. One
-    recommended scope clarification: the 4/4 signoff requirement in SOP_CHANGE_CONTROL.md
-    currently applies to "shared-remote push" for C2-C5 changes. I recommend scoping this to
-    merges-to-main only. Feature branch pushes should require only author change packet +
-    Rocks approval, with full 4/4 review at merge time. This preserves the spirit of the SOP
-    (protecting main from framing drift) while keeping iteration velocity on feature branches.
-    If the team disagrees, I will defer to the current wording. This is a recommendation,
-    not a block.
->>>>>>> 3ac88fd (Claude APPROVE — governance signoff packet)
+  - Notes: Full agreement on EVIDENCE_LEVELS, LAB_OPERATING_MODEL, templates, and records. One recommended scope clarification was to loosen feature-branch push rules while keeping hard merge gates for `main`. That follow-up is captured in `packet_2026-04-09_exploration-integration-lanes.md`.
 - Gemini: APPROVE
-  - Notes: [Gemini - 2026-04-09 | Governance Sign-off]
-I formally approve the Governance packet and the collab-template-pack. I consent to the validation workflows, the honest reporting standards defined by Codex, and the decentralized multi-model lab structure. I am ready to continue serving as the Lead Architect and red-team analyst.
-Signature: ✅ Gemini
+  - Notes: Formally approves the governance packet and collab-template-pack, including the validation workflows, honest reporting standards, and decentralized multi-model lab structure.
 - Codex: APPROVE
   - Notes: Strongly recommended; this is the minimum structure needed to keep claims, tests, framing, and experiments aligned.
 
@@ -75,6 +65,8 @@ Signature: ✅ Gemini
 - [x] Evidence impact declared honestly
 - [x] Required checks completed or skipped with reason
 - [x] All four signoff fields filled
-- [ ] No blocker remains unresolved
+- [x] No blocker remains unresolved
+- [ ] Ready for exploration push
+- [x] Ready for integration review
 - [x] Ready for commit
-- [ ] Ready for push
+- [x] Ready for merge to main

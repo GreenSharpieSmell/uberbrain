@@ -22,6 +22,12 @@ Source-of-truth artifacts belong in the repo.
 
 If a change affects claims, thresholds, experiments, or project framing, capture it with one of these templates.
 
+Minimum rule:
+
+- local commits can stay lightweight
+- before the first shared-remote push of meaningful work, open a change packet
+- before merge to `main`, complete the full signoff path
+
 ## Suggested Placement
 
 - Handoffs: whiteboard first, then copy stable versions into a repo doc when needed
@@ -38,4 +44,5 @@ If a change affects claims, thresholds, experiments, or project framing, capture
 - Run sheet: `run_sheet_YYYY-MM-DD_short-experiment.md`
 - Benchmark report: `benchmark_report_YYYY-MM-DD_short-claim.md`
 - Claim change: `claim_change_YYYY-MM-DD_claim-id.md`
+- Change packet: `packet_YYYY-MM-DD_short-topic.md`
 - Red-team finding: `red_team_YYYY-MM-DD_short-risk.md`

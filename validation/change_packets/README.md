@@ -10,13 +10,18 @@ Use one packet per branch-sized change.
 
 ## Minimum Rule
 
-Before a meaningful change is committed or pushed, the packet should describe:
+Before a meaningful change is pushed to a shared remote or proposed for merge, the packet should describe:
 
 - scope
 - evidence impact
 - required checks
 - review risk
 - signoff status for Rocks, Claude, Gemini, and Codex
+
+## Lane Rule
+
+- exploration lane packets may be pushed with `PENDING` signoffs
+- integration lane packets must be fully signed before merge to `main`
 
 ## Status Convention
 
