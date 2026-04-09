@@ -1,0 +1,18 @@
+{
+  "experiment": "phase0a_transparency_analog",
+  "status": "fill_before_first_run",
+  "camera": {
+    "model": null,
+    "exposure_settings": null
+  },
+  "geometry": {
+    "camera_to_medium": null,
+    "light_to_medium": null
+  },
+  "thresholds": {
+    "ssim_warn": null,
+    "clean_floor": null,
+    "localization_tolerance": null
+  },
+  "notes": "Predeclare thresholds before the first capture run."
+}

@@ -38,18 +38,38 @@ Per Gemini's review: the digital twin is verified *within these bounds*.
 
 **Discovered by:** adversarial test failures (TestStructuredCorruption::test_corner_corruption_detected)
 
-**Observation:** Corruption isolated to the four corners of the hologram (4 × 30×30 = ~5.5% coverage) produces SSIM ≈ 1.000 — effectively undetectable. The FFT hologram stores less energy in corner regions.
+**Observation:** Corruption isolated to the four corners of the hologram remains weakly visible even at large coverage. In the current adversarial suite, four 60×60 corner erasures (~22% coverage) still produce SSIM ≈ 1.000, while an equal-area central erasure of the same total damaged pixels drops SSIM to ~0.037.
 
 **Root cause:** Fourier holography spreads spatial frequency energy non-uniformly. Low spatial frequencies (containing most image energy) are concentrated in the central region of the Fourier plane. Corner regions carry high-frequency detail that contributes less to overall SSIM.
 
 **What this means:**
 - Not all hologram regions contribute equally to reconstruction fidelity
-- A physical damage site in a corner region requires larger area to trigger VERIFY
+- Equal-area corner damage is dramatically less detectable than equal-area center damage
+- A physical damage site in a corner region requires much larger area to trigger VERIFY
 - Adaptive addressing (weighting corner regions more heavily) could compensate
 
 **Impact on claims:** H1 (PASS with caveat), H3 (OPEN)
 
 **Mitigation path:** Address-weighted SSIM computation (future sim update). Benchtop experiment will measure corner vs center sensitivity empirically.
+
+---
+
+## L7 — Periodic Grid Corruption Can Alias With FFT Structure
+
+**Discovered by:** Codex repo review follow-up, 2026-04-09
+
+**Observation:** Some regular grid attacks preserve SSIM above the VERIFY threshold even at high coverage. In the current adversarial suite, a periodic 6×6 patch grid on a 12-pixel stride changes ~24.2% of the hologram yet still yields SSIM ≈ 0.970, while matched random corruption of the exact same changed-pixel count drops SSIM to ~0.191.
+
+**Root cause:** The attack pattern can align with the discrete Fourier structure strongly enough that removed energy aliases into a reconstruction that still looks globally similar under vanilla SSIM.
+
+**What this means:**
+- Detection is not monotone in damaged area for all structured attacks
+- Some periodic patterns are more dangerous than random damage of the same size
+- The current VERIFY metric is vulnerable to adversarially regular corruption layouts
+
+**Impact on claims:** H1 (PASS with caveat), H3 (OPEN)
+
+**Mitigation path:** Sweep structured attack families systematically, add address-weighted fidelity metrics, and test phase-offset or jittered grid attacks rather than only area-matched corruption.
 
 ---
 
@@ -137,6 +157,7 @@ Per Gemini's review: the digital twin is verified *within these bounds*.
 | L4 | benchmark.py SSIM inconsistency | Medium | H4 | Update correction model |
 | L5 | Phase 0-A is analogy only | High | All | Phases 1–3 |
 | L6 | Sim 3 uses one graph model | Low | C1, C2 | Adversarial tests added |
+| L7 | Periodic grid alias window | Medium | H1, H3 | Structured-attack sweeps |
 
 ---
 
