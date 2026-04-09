@@ -52,9 +52,6 @@
 - Rocks: APPROVED
   - Notes: As the human in the middle, this is going to be required for me to be able to keep track of all changes and what is happening with the project.
 <<<<<<< HEAD
-- Claude: PENDING
-  - Notes:
-=======
 - Claude: APPROVE
   - Notes: Full agreement on EVIDENCE_LEVELS, LAB_OPERATING_MODEL, templates, and records. One
     recommended scope clarification: the 4/4 signoff requirement in SOP_CHANGE_CONTROL.md
