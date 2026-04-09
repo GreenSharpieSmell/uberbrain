@@ -1,0 +1,122 @@
+import importlib.util
+from itertools import product
+from pathlib import Path
+
+import numpy as np
+
+
+def find_repo_root(start: Path) -> Path:
+    """Find the repository root by locating sim/sim1_holographic.py upward."""
+    candidates = [start] + list(start.parents)
+    for candidate in candidates:
+        if (candidate / "sim" / "sim1_holographic.py").exists():
+            return candidate
+    raise FileNotFoundError(
+        "Could not find repo root containing sim/sim1_holographic.py"
+    )
+
+
+ROOT = find_repo_root(Path(__file__).resolve())
+
+
+def load_module(name: str, relpath: str):
+    path = ROOT / relpath
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+sim1 = load_module("sim1_holographic", "sim/sim1_holographic.py")
+sim2 = load_module("sim2_oomphlap", "sim/sim2_oomphlap.py")
+sim3 = load_module("sim3_consolicant", "sim/sim3_consolicant.py")
+
+
+def test_sim1_corruption_triggers_degradation_at_default_region():
+    data = sim1.create_data_pattern(sim1.GRID_SIZE, sim1.SEED)
+    hologram_clean, _ = sim1.encode_hologram(data)
+    reconstruction_clean = sim1.reconstruct(hologram_clean)
+
+    hologram_corrupted = sim1.corrupt_hologram(
+        hologram_clean,
+        sim1.CORRUPTION_X,
+        sim1.CORRUPTION_Y,
+        sim1.CORRUPTION_W,
+        sim1.CORRUPTION_H,
+    )
+    reconstruction_corrupted = sim1.reconstruct(hologram_corrupted)
+
+    fidelity_ssim, _, status, _ = sim1.verify_fidelity(
+        reconstruction_clean, reconstruction_corrupted
+    )
+
+    assert fidelity_ssim < sim1.FIDELITY_WARN
+    assert "DEGRADED" in status
+
+
+def test_sim1_larger_corruption_at_same_location_reduces_fidelity():
+    data = sim1.create_data_pattern(sim1.GRID_SIZE, sim1.SEED)
+    hologram_clean, _ = sim1.encode_hologram(data)
+    reconstruction_clean = sim1.reconstruct(hologram_clean)
+
+    center_x, center_y = 96, 96
+
+    def ssim_for_square(square_size: int) -> float:
+        hc = sim1.corrupt_hologram(
+            hologram_clean, center_x, center_y, square_size, square_size
+        )
+        rc = sim1.reconstruct(hc)
+        ssim_score, _, _, _ = sim1.verify_fidelity(reconstruction_clean, rc)
+        return float(ssim_score)
+
+    s_small = ssim_for_square(10)
+    s_medium = ssim_for_square(25)
+    s_large = ssim_for_square(40)
+
+    assert s_small >= s_medium - 1e-6
+    assert s_medium >= s_large - 1e-6
+
+
+def test_sim2_truth_table_all_binary_states_round_trip_correct():
+    oomphlap = sim2.Oomphlap(sim2.CHANNELS)
+    results = sim2.demonstrate_binary_truth_table(oomphlap)
+
+    assert len(results) == 2 ** len(sim2.CHANNELS)
+    assert all(row["correct"] for row in results)
+
+
+def test_sim2_noise_causes_nonzero_error_at_high_sigma():
+    rng = np.random.default_rng(1)
+    states = list(product([0, 1], repeat=3))
+
+    def state_error_rate(sigma: float, trials: int = 1500) -> float:
+        total = 0
+        wrong = 0
+        for s in states:
+            ideal = [sim2.MLC_LEVELS[b * 3] for b in s]
+            for _ in range(trials):
+                noisy = [x + rng.normal(0.0, sigma) for x in ideal]
+                read = tuple(1 if x >= sim2.GST_THRESHOLD else 0 for x in noisy)
+                wrong += int(read != s)
+                total += 1
+        return wrong / total
+
+    low_noise_error = state_error_rate(0.01)
+    high_noise_error = state_error_rate(0.08)
+
+    assert low_noise_error < 0.001
+    assert high_noise_error > low_noise_error
+
+
+def test_sim3_consolidation_partitions_every_node_and_bleach_rule_holds():
+    graph = sim3.build_memory_graph(sim3.NUM_NODES)
+    bleach, repair, protected = sim3.run_consolidate_cycle(graph)
+
+    assert len(bleach) + len(repair) + len(protected) == sim3.NUM_NODES
+
+    for node in bleach:
+        data = graph.nodes[node]
+        assert data["stale_time"] > sim3.THRESH_STALE
+        assert data["fidelity"] < sim3.THRESH_FIDELITY
+        assert data["centrality"] < sim3.THRESH_ORPHAN
