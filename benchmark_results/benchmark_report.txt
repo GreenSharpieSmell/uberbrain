@@ -1,0 +1,33 @@
+UBERBRAIN BENCHMARK REPORT
+============================================================
+Generated: 2026-04-09T12:32:54.089331+00:00
+
+CLAIM REGISTRY RESULTS
+----------------------------------------
+  [PASS] Claim H1
+  [PASS] Claim H2
+  [PASS] Claim O1
+  [PASS] Claim C1
+  [PASS] Claim C2
+  [PASS] Claim C3
+  [PASS] Claim C4
+
+  7/7 claims PASS
+
+KEY METRICS
+----------------------------------------
+  Sim 1 corruption SSIM:  0.2608
+  Sim 1 MC mean ± std:    0.1807 ± 0.0010
+  Sim 1 corrected SSIM:   0.0525 (not 1.000)
+  Sim 2 states correct:   8/8
+  Sim 2 state space gain: 4.0× vs 1-channel baseline
+  Sim 3 bleach targets:   54
+  Sim 3 age-only damage:  would destroy 68 protected nodes
+
+REPRODUCIBILITY
+----------------------------------------
+  Seed: 42
+  N_trials (Sim 1 MC): 20
+  Run: python benchmark.py
+
+============================================================

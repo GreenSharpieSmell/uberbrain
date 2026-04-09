@@ -91,9 +91,13 @@ Current silicon AI has a software honesty problem that is being addressed with m
 
 ---
 
-## Simulations — All Six Commands Verified
+## Simulations — Six-Command Pipeline Demonstrated
 
-All six commands of the Uberbrain instruction set have been mathematically simulated and integrated into a complete pipeline. No hardware required to run these.
+All six commands of the Uberbrain instruction set have been mathematically simulated. The simulations demonstrate the architectural logic using real physics equations (Fourier optics, GST material constants, Barabási-Albert memory graphs). They are not hardware validation.
+
+**Current evidence level: Suggests** (simulation evidence present, benchtop experiment pending)  
+See [VALIDATION_SPEC.md](VALIDATION_SPEC.md) and [CLAIMS.md](CLAIMS.md) for the full picture.  
+See [SIM_LIMITATIONS.md](SIM_LIMITATIONS.md) for what the simulations do not prove.
 
 | Simulation | Commands | Key Result |
 |------------|----------|------------|
@@ -115,7 +119,7 @@ python sim/sim4_pipeline.py
 
 A proof-of-concept can be built for approximately $250. See [PROTOTYPE.md](PROTOTYPE.md) for the full build plan.
 
-The digital twin is complete. The next step is physical. The first experiment requires no hardware purchases — just a Raspberry Pi, a camera module, a printer, and a marker. See Phase 0-A in the prototype document.
+The simulations demonstrate the mathematical basis of the architecture. The next step is physical validation. The first experiment requires no hardware purchases — just a Raspberry Pi, a camera module, a printer, and a marker. See Phase 0-A in the prototype document.
 
 **We are looking for contributors to help build the physical Logical Prototyping Unit (LPU).** If you have access to optical hardware, a Raspberry Pi, or materials science lab equipment, open a Discussion.
 
@@ -130,8 +134,10 @@ The digital twin is complete. The next step is physical. The first experiment re
 - [QUESTIONS_LOG.md](QUESTIONS_LOG.md) — Technical Q&A from the founding session
 - [CONTRIBUTORS.md](CONTRIBUTORS.md) — Who built this
 - [CITATIONS.md](CITATIONS.md) — 34 academic references across 7 domains
-- [ROADMAP.md](ROADMAP.md) — Phase 0 through contact lens form factor
-- [INDUSTRY_IMPACT.md](INDUSTRY_IMPACT.md) — Impact analysis across 8 industries
+- [VALIDATION_SPEC.md](VALIDATION_SPEC.md) — Formal validation spec (Codex)
+- [CLAIMS.md](CLAIMS.md) — 15 falsifiable claims with evidence levels
+- [SIM_LIMITATIONS.md](SIM_LIMITATIONS.md) — Honest catalogue of what simulations do not prove
+- [SPECIFICATIONS.md](SPECIFICATIONS.md) — Engineering KPIs and falsification criteria
 - [sim/](sim/) — Python simulations — all six commands verified
 - [LICENSE](LICENSE) — CC0 Public Domain Dedication
 
