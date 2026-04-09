@@ -135,11 +135,40 @@ Requires the strictest wording review. No public-facing statement may exceed the
 Use this cadence unless urgency requires the exception path:
 
 1. Draft locally
-2. Open change packet before staging
+2. If the branch will be shared, open a change packet before the first remote push
 3. Share packet summary and intended diff in the whiteboard
-4. Collect four signoff decisions
-5. Stage, commit, and push only after all required signoffs are recorded
-6. Merge only after artifacts and docs are aligned
+4. Stay in exploration lane while the branch is still WIP
+5. Promote to integration lane when it targets `main` or becomes adopted project position
+6. Collect four signoff decisions before merge to `main`
+7. Merge only after artifacts and docs are aligned
+
+## Working Lanes
+
+Think of the lab as having three operating lanes.
+
+### Exploration Lane
+
+- local commits are free
+- feature-branch pushes are allowed with a draft packet
+- signoffs may remain pending
+- work here is exploratory, not authoritative
+
+### Integration Lane
+
+- the branch is now trying to become the lab record
+- claims, thresholds, experiment protocols, and public wording are no longer draft
+- 4/4 signoff is required before merge to `main`
+
+### Emergency Lane
+
+- this is the narrow break-glass path
+- use only for credentials, destructive regressions, or repo recovery
+- every emergency action creates paperwork afterward
+
+The cultural rule is simple:
+
+feature branches are notebooks
+`main` is the lab record
 
 ## Stop-The-Line Rule
 

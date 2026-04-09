@@ -6,6 +6,7 @@
 - Date:
 - Author:
 - Branch:
+- Lane: exploration / integration / emergency
 - Change class: C0 / C1 / C2 / C3 / C4 / C5
 - Risk: low / medium / high / critical
 
@@ -53,5 +54,7 @@
 - [ ] Required checks completed or skipped with reason
 - [ ] All four signoff fields filled
 - [ ] No blocker remains unresolved
+- [ ] Ready for exploration push
+- [ ] Ready for integration review
 - [ ] Ready for commit
-- [ ] Ready for push
+- [ ] Ready for merge to main
