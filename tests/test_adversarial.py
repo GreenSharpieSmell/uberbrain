@@ -303,13 +303,14 @@ class TestStructuredCorruption:
                 C[y:y+patch_size, x:x+patch_size] = 0.0
         return C
 
-    def test_grid_corruption_detected_at_5pct_coverage(self, baseline):
-        """5% coverage grid corruption must be detectable."""
+    def test_dense_offset_grid_corruption_detected(self, baseline):
+        """A dense non-aliasing grid (~14% coverage) should be detectable."""
         holo_clean, rec_clean = baseline
 
-        # stride=16, patch=6 → higher density grid for reliable detection
+        # stride=16, patch=6 creates a dense grid that does not align with the
+        # stronger alias window observed at stride=12, patch=6.
         holo_grid = self._corrupt_grid(holo_clean, stride=16, patch_size=6)
-        coverage  = np.sum(holo_grid == 0) / holo_grid.size
+        coverage  = np.count_nonzero(holo_grid != holo_clean) / holo_grid.size
         rec_grid  = sim1.reconstruct(holo_grid)
         score, _, status, _ = sim1.verify_fidelity(rec_clean, rec_grid)
 
@@ -317,63 +318,81 @@ class TestStructuredCorruption:
             f"Grid corruption ({coverage*100:.1f}%) not detected: SSIM={score:.4f}"
         )
 
-    def test_structured_vs_random_comparable_detection(self, baseline):
+    def test_periodic_grid_alias_can_evade_matched_random_damage(self, baseline):
         """
-        At matched coverage >10%, structured corruption should be no
-        harder to detect than random corruption of the same area.
+        Some periodic grid patterns align with the FFT structure strongly enough
+        to preserve SSIM above the VERIFY threshold, even when matched random
+        corruption of the same area is detected.
 
-        NOTE (Codex finding confirmed): small-coverage corruption (<6%)
-        can evade VERIFY detection regardless of pattern type. This is
-        a real simulation-scale limitation documented in SIM_LIMITATIONS.md.
-        We test at 15% coverage where detection is reliable for both types.
+        This is a documented simulation limitation, not a success case.
         """
         holo_clean, rec_clean = baseline
         rng = np.random.default_rng(SEED)
 
-        # Random corruption ~15%
-        holo_rand  = holo_clean.copy()
-        mask       = rng.random(holo_clean.shape) < 0.15
-        holo_rand[mask] = 0.0
-        rec_rand   = sim1.reconstruct(holo_rand)
-        score_rand, _, _, _ = sim1.verify_fidelity(rec_clean, rec_rand)
-
-        # Grid corruption ~15% (stride=12, patch=6)
+        # Periodic grid corruption that lands in an alias window.
         holo_grid  = self._corrupt_grid(holo_clean, stride=12, patch_size=6)
+        changed_grid = np.count_nonzero(holo_grid != holo_clean)
+        coverage_grid = changed_grid / holo_grid.size
         rec_grid   = sim1.reconstruct(holo_grid)
         score_grid, _, _, _ = sim1.verify_fidelity(rec_clean, rec_grid)
 
-        # Both should be detectable at this coverage
-        assert score_grid < sim1.FIDELITY_WARN, \
-            f"Structured corruption (15%) evaded detection: SSIM={score_grid:.4f}"
-        assert score_rand < sim1.FIDELITY_WARN, \
-            f"Random corruption (15%) evaded detection: SSIM={score_rand:.4f}"
+        # Random corruption at the exact same changed-pixel count.
+        holo_rand = holo_clean.copy()
+        indices = rng.choice(holo_clean.size, size=changed_grid, replace=False)
+        holo_rand.reshape(-1)[indices] = 0.0
+        changed_rand = np.count_nonzero(holo_rand != holo_clean)
+        rec_rand = sim1.reconstruct(holo_rand)
+        score_rand, _, _, _ = sim1.verify_fidelity(rec_clean, rec_rand)
 
-    def test_corner_corruption_detected(self, baseline):
+        assert changed_rand == changed_grid, "Coverage mismatch invalidates comparison"
+        assert score_rand < sim1.FIDELITY_WARN, (
+            f"Matched random corruption ({coverage_grid*100:.1f}%) should trigger VERIFY: "
+            f"SSIM={score_rand:.4f}"
+        )
+        assert score_grid > sim1.FIDELITY_WARN, (
+            f"Periodic grid alias limitation disappeared unexpectedly: SSIM={score_grid:.4f}"
+        )
+        assert score_grid > score_rand, (
+            f"Periodic grid should be harder to detect than matched random damage: "
+            f"grid={score_grid:.4f}, random={score_rand:.4f}"
+        )
+
+    def test_corner_damage_is_harder_to_detect_than_center_damage(self, baseline):
         """
-        Corner regions are lower-energy in FFT — this tests whether corners
-        are detectable at all.
-
-        NOTE (Codex finding confirmed): corner corruption in Fourier holography
-        contributes less to reconstruction than central regions. This is a real
-        physics property of FFT holography, documented in SIM_LIMITATIONS.md.
-        We use larger corners (60px) to ensure detectable coverage.
+        Corner regions carry less reconstruction energy than the center of the
+        Fourier plane. Equal-area corner damage should therefore be less visible
+        to VERIFY than equal-area center damage in the current unweighted model.
         """
         holo_clean, rec_clean = baseline
 
         size = sim1.GRID_SIZE
-        corner_size = 60  # Larger corners for reliable detection
+        corner_size = 60
         holo_corner = holo_clean.copy()
         holo_corner[:corner_size, :corner_size]   = 0.0
         holo_corner[:corner_size, -corner_size:]  = 0.0
         holo_corner[-corner_size:, :corner_size]  = 0.0
         holo_corner[-corner_size:, -corner_size:] = 0.0
 
-        coverage = 4 * corner_size**2 / size**2
+        changed_corner = np.count_nonzero(holo_corner != holo_clean)
+        coverage = changed_corner / size**2
         rec_corner = sim1.reconstruct(holo_corner)
-        score, _, status, _ = sim1.verify_fidelity(rec_clean, rec_corner)
+        score_corner, _, _, _ = sim1.verify_fidelity(rec_clean, rec_corner)
 
-        assert score < sim1.FIDELITY_WARN, (
-            f"Corner corruption ({coverage*100:.1f}%) not detected: SSIM={score:.4f}"
+        center_side = int(np.sqrt(changed_corner))
+        holo_center = holo_clean.copy()
+        start = (size - center_side) // 2
+        holo_center[start:start+center_side, start:start+center_side] = 0.0
+        changed_center = np.count_nonzero(holo_center != holo_clean)
+        rec_center = sim1.reconstruct(holo_center)
+        score_center, _, _, _ = sim1.verify_fidelity(rec_clean, rec_center)
+
+        assert changed_center == changed_corner, "Corner/center comparison must use equal area"
+        assert score_center < sim1.FIDELITY_WARN, (
+            f"Center damage ({coverage*100:.1f}%) should trigger VERIFY: SSIM={score_center:.4f}"
+        )
+        assert score_corner > score_center, (
+            f"Corner damage should be harder to detect than equal-area center damage: "
+            f"corner={score_corner:.4f}, center={score_center:.4f}"
         )
 
     def test_multi_scatter_corruption_detected(self, baseline):
