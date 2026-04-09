@@ -1,0 +1,22 @@
+# Force LF line endings for all text files
+* text=auto eol=lf
+
+# Explicitly mark Python files
+*.py text eol=lf
+
+# Markdown
+*.md text eol=lf
+
+# Data files
+*.txt text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+
+# Binary files — don't touch
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pptx binary
+*.docx binary
+*.xlsx binary
