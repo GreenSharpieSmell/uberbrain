@@ -181,7 +181,10 @@ At this scale: petabyte capacity, full AI model inference, near-zero heat, no ex
 | 2026-04-08 | Sim 2 oomphlap encoding (WRITE + READ) — binary escaped |
 | 2026-04-08 | Sim 3 Consolicant filter (CONSOLIDATE + BLEACH) — Gemini authored |
 | 2026-04-08 | Sim 4 full pipeline — all six commands verified end-to-end |
-| 2026-04-08 | INDUSTRY_IMPACT.md — 8 sector analysis |
+| 2026-04-08 | VALIDATION_SPEC.md — Codex formal validation program |
+| 2026-04-08 | CLAIMS.md — 15 falsifiable claims, pass criteria, evidence levels |
+| 2026-04-08 | benchmark.py — one-command reproducible benchmark runner |
+| 2026-04-08 | CI pipeline — GitHub Actions, 3 Python versions, auto-test on push |
 
 ---
 
