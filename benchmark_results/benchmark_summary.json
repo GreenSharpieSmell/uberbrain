@@ -1,0 +1,286 @@
+{
+  "uberbrain_benchmark": {
+    "version": "0.2",
+    "timestamp": "2026-04-09T12:32:54.089331+00:00",
+    "seed": 42,
+    "config": {
+      "sim1_grid_size": 256,
+      "sim1_corruption_x": 90,
+      "sim1_corruption_y": 80,
+      "sim1_corruption_w": 60,
+      "sim1_corruption_h": 60,
+      "sim1_n_trials": 20,
+      "sim1_fidelity_warn": 0.95,
+      "sim2_n_channels": 3,
+      "sim2_n_mlc_demo": 6,
+      "sim3_n_nodes": 300,
+      "sim3_thresh_stale": 60,
+      "sim3_thresh_fidelity": 0.5,
+      "sim3_thresh_orphan": 0.02,
+      "adversarial_corruption_sizes": [
+        10,
+        20,
+        30,
+        40,
+        50,
+        60
+      ],
+      "seed": 42,
+      "version": "0.2"
+    },
+    "results": {
+      "sim1": {
+        "claim_H1_pass": "True",
+        "claim_H2_monotone": true,
+        "corruption_pct": 5.4931640625,
+        "ssim_corrupted_clean": 0.2607880774793314,
+        "mse_corrupted": 0.042611301904622666,
+        "mc_corrupt_mean": 0.18068915570424135,
+        "mc_corrupt_std": 0.001026807491459795,
+        "mc_corrupt_ci95_lo": 0.17850122867510881,
+        "mc_corrupt_ci95_hi": 0.18235400894488357,
+        "mc_correct_mean": 0.05248902407712045,
+        "mc_correct_std": 0.00024479486735147325,
+        "mc_correct_ci95_lo": 0.05201040012825145,
+        "mc_correct_ci95_hi": 0.05280926165350781,
+        "n_trials": 20,
+        "seed": 42,
+        "monotonicity_results": [
+          {
+            "size": 10,
+            "ssim": 0.9999999998136513
+          },
+          {
+            "size": 20,
+            "ssim": 0.999999997721907
+          },
+          {
+            "size": 30,
+            "ssim": 0.9999999296085418
+          },
+          {
+            "size": 40,
+            "ssim": 0.945463714517592
+          },
+          {
+            "size": 50,
+            "ssim": 0.28124460941320484
+          },
+          {
+            "size": 60,
+            "ssim": 0.2607880774793314
+          }
+        ],
+        "elapsed_s": 0.5
+      },
+      "sim2": {
+        "claim_O1_pass": true,
+        "n_states_correct": 8,
+        "n_states_total": 8,
+        "state_space_binary": 8,
+        "state_space_mlc": 64,
+        "baseline_1ch_states": 2,
+        "improvement_factor": 4.0,
+        "noise_results": [
+          {
+            "sigma": 0.01,
+            "ber": 0.0,
+            "n_trials": 8000
+          },
+          {
+            "sigma": 0.02,
+            "ber": 0.0,
+            "n_trials": 8000
+          },
+          {
+            "sigma": 0.04,
+            "ber": 0.0,
+            "n_trials": 8000
+          },
+          {
+            "sigma": 0.06,
+            "ber": 0.006625,
+            "n_trials": 8000
+          },
+          {
+            "sigma": 0.08,
+            "ber": 0.0485,
+            "n_trials": 8000
+          }
+        ],
+        "truth_table": [
+          {
+            "written": [
+              0,
+              0,
+              0
+            ],
+            "read_back": [
+              0,
+              0,
+              0
+            ],
+            "state_value": 0,
+            "reflectivities": [
+              0.38,
+              0.38,
+              0.38
+            ],
+            "correct": true
+          },
+          {
+            "written": [
+              0,
+              0,
+              1
+            ],
+            "read_back": [
+              0,
+              0,
+              1
+            ],
+            "state_value": 1,
+            "reflectivities": [
+              0.38,
+              0.38,
+              0.72
+            ],
+            "correct": true
+          },
+          {
+            "written": [
+              0,
+              1,
+              0
+            ],
+            "read_back": [
+              0,
+              1,
+              0
+            ],
+            "state_value": 2,
+            "reflectivities": [
+              0.38,
+              0.72,
+              0.38
+            ],
+            "correct": true
+          },
+          {
+            "written": [
+              0,
+              1,
+              1
+            ],
+            "read_back": [
+              0,
+              1,
+              1
+            ],
+            "state_value": 3,
+            "reflectivities": [
+              0.38,
+              0.72,
+              0.72
+            ],
+            "correct": true
+          },
+          {
+            "written": [
+              1,
+              0,
+              0
+            ],
+            "read_back": [
+              1,
+              0,
+              0
+            ],
+            "state_value": 4,
+            "reflectivities": [
+              0.72,
+              0.38,
+              0.38
+            ],
+            "correct": true
+          },
+          {
+            "written": [
+              1,
+              0,
+              1
+            ],
+            "read_back": [
+              1,
+              0,
+              1
+            ],
+            "state_value": 5,
+            "reflectivities": [
+              0.72,
+              0.38,
+              0.72
+            ],
+            "correct": true
+          },
+          {
+            "written": [
+              1,
+              1,
+              0
+            ],
+            "read_back": [
+              1,
+              1,
+              0
+            ],
+            "state_value": 6,
+            "reflectivities": [
+              0.72,
+              0.72,
+              0.38
+            ],
+            "correct": true
+          },
+          {
+            "written": [
+              1,
+              1,
+              1
+            ],
+            "read_back": [
+              1,
+              1,
+              1
+            ],
+            "state_value": 7,
+            "reflectivities": [
+              0.72,
+              0.72,
+              0.72
+            ],
+            "correct": true
+          }
+        ],
+        "elapsed_s": 0.11
+      },
+      "sim3": {
+        "claim_C1_partition_correct": true,
+        "claim_C2_connected_guard": true,
+        "claim_C3_age_baseline": true,
+        "claim_C4_fidelity_baseline": true,
+        "n_total": 300,
+        "n_bleach": 54,
+        "n_repair": 19,
+        "n_protected": 227,
+        "max_bleach_centrality": 0.016722408026755852,
+        "age_only_would_delete": 125,
+        "age_destroys_protected": 68,
+        "age_destroys_repair": 3,
+        "fidelity_only_would_delete": 141,
+        "fidelity_destroys_repair": 19,
+        "elapsed_s": 0.0
+      }
+    }
+  }
+}
