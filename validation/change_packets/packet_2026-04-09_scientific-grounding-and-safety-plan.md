@@ -6,7 +6,7 @@
 - Date: 2026-04-09
 - Author: Codex
 - Branch: codex/scientific-grounding-safety-plan
-- Lane: exploration
+- Lane: integration
 - Change class: C1 / C4
 - Risk: high
 
@@ -33,7 +33,7 @@
 - Follow-up tasks:
   - Claude review for implementability <- COMPLETE
   - Gemini review for scientific coherence <- COMPLETE
-  - Rocks signoff on the proposed gate <- PENDING
+  - Rocks signoff on the proposed gate <- COMPLETE
   - Instantiate the required safety and assumptions documents <- PENDING Phase A execution
 
 ## Review Notes
@@ -44,8 +44,8 @@
 
 ## Signoff Matrix
 
-- Rocks: PENDING
-  - Notes:
+- Rocks: APPROVE
+  - Notes: It might take longer to get to prototyping now, but these safeguards are necessary.
 - Claude: APPROVE
   - Notes: Plan structure and sequencing are sound. Required clarifications were added for ANSI-referenced laser review, the Phase 0-A open-beam contradiction, operator qualifications, thermal baselines, and alias-window artifacts.
 - Gemini: APPROVE
@@ -62,4 +62,4 @@
 - [x] No blocker remains unresolved
 - [x] Ready for commit
 - [x] Ready for exploration push
-- [ ] Ready for merge to main
+- [x] Ready for merge to main
