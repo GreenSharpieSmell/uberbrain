@@ -32,6 +32,18 @@ import bench_baselines
 import adversarial as bench_adv
 
 
+def _load_run_matrix():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "run_matrix_under_test",
+        ROOT / "sim" / "benchmarks" / "run_matrix.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # io.py tests
 # ─────────────────────────────────────────────────────────────────────────────
@@ -357,3 +369,16 @@ class TestAdversarial:
             faulted["ssim_score"] != state["ssim_score"]
         )
         assert changed
+
+
+class TestRunMatrixClaimRigor:
+    def test_c4_reports_unmodeled_ablations_explicitly(self):
+        run_matrix = _load_run_matrix()
+        rows = run_matrix.run_claim_c4({"run": {"seed": 42, "trials": 6}})
+        summary = rows[-1]
+
+        assert summary["claim"] == "c4_sim4_pipeline"
+        assert summary["modeled_ablation_count"] == 2
+        assert summary["declared_ablation_count"] == 3
+        assert summary["all_ablations_modeled"] == 0.0
+        assert "uplift_vs_modeled_ablations" in summary

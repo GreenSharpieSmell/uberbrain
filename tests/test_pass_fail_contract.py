@@ -170,14 +170,27 @@ class TestPassFailContract:
         gate = result["claims"]["c1_test"]["gates"]["roc_auc"]
         assert abs(gate["measured"] - 0.95) < 1e-9
 
-    def test_missing_metric_is_skip_not_fail(self):
+    def test_missing_metric_is_fail_not_skip(self):
         result = _evaluate(
             gates={"roc_auc":      {"op": ">=", "value": 0.90},
                    "missing_metric": {"op": ">=", "value": 0.50}},
             measured={"roc_auc": 0.95}  # missing_metric not in measured
         )
         gates = result["claims"]["c1_test"]["gates"]
-        assert gates["missing_metric"]["status"] == "SKIP"
+        assert gates["missing_metric"]["status"] == "FAIL"
+        assert result["claims"]["c1_test"]["status"] == "FAIL"
+        assert result["overall_status"] == "FAIL"
+
+    def test_all_missing_metrics_fail_claim(self):
+        result = _evaluate(
+            gates={"roc_auc": {"op": ">=", "value": 0.90}},
+            measured={}
+        )
+        gate = result["claims"]["c1_test"]["gates"]["roc_auc"]
+        assert gate["status"] == "FAIL"
+        assert gate["measured"] is None
+        assert result["claims"]["c1_test"]["status"] == "FAIL"
+        assert result["overall_status"] == "FAIL"
 
     def test_summary_json_schema_matches_codex_spec(self):
         """

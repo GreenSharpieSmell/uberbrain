@@ -377,6 +377,12 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     n_trials = min(run_cfg.get("trials", 200), 50)  # Limit for speed
 
     rows = []
+    modeled_ablations = {"no_verify", "no_correction_write"}
+    declared_ablations = {
+        "no_verify",
+        "no_correction_write",
+        "no_consolidate_bleach",
+    }
     data         = sim1.create_data_pattern(sim1.GRID_SIZE, seed)
     holo_clean,_ = sim1.encode_hologram(data)
     rec_clean    = sim1.reconstruct(holo_clean)
@@ -420,19 +426,31 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             "ssim_no_verify":     round(ssim_no_verify, 6),
             "ssim_no_correct":    round(ssim_no_correct, 6),
             "uplift_vs_no_verify": round(float(ssim_pipeline) - ssim_no_verify, 6),
+            "uplift_vs_no_correction_write": round(
+                float(ssim_pipeline) - ssim_no_correct, 6
+            ),
         })
 
     # Compute summary metrics for YAML gates
-    all_uplifts    = [r["uplift_vs_no_verify"] for r in rows]
-    min_uplift     = bench_metrics.mean(all_uplifts)  # mean uplift across trials
+    unmodeled_ablations = sorted(declared_ablations - modeled_ablations)
+    mean_uplift_no_verify = bench_metrics.mean(
+        [r["uplift_vs_no_verify"] for r in rows]
+    )
+    mean_uplift_no_correct = bench_metrics.mean(
+        [r["uplift_vs_no_correction_write"] for r in rows]
+    )
+    min_modeled_uplift = min(mean_uplift_no_verify, mean_uplift_no_correct)
     n_success      = sum(1 for r in rows if r["ssim_pipeline"] >= 0.90)
     min_success    = n_success / len(rows) if rows else 0.0
 
     rows.append({
-        "claim":                  "c4_sim4_pipeline",
-        "uplift_vs_each_ablation": round(min_uplift, 6),
-        "min_success_rate":        round(min_success, 6),
-        "n_trials":                len(rows),
+        "claim":                     "c4_sim4_pipeline",
+        "uplift_vs_modeled_ablations": round(min_modeled_uplift, 6),
+        "min_success_rate":           round(min_success, 6),
+        "modeled_ablation_count":     len(modeled_ablations),
+        "declared_ablation_count":    len(declared_ablations),
+        "all_ablations_modeled":      1.0 if not unmodeled_ablations else 0.0,
+        "n_trials":                   len(rows),
     })
 
     return rows
@@ -468,9 +486,11 @@ def evaluate_pass_fail(
             measured  = claim_metrics.get(gate_name)
 
             if measured is None:
+                claim_pass = False
+                any_fail   = True
                 gates[gate_name] = {
-                    "status":    "SKIP",
-                    "reason":    f"Metric '{gate_name}' not computed",
+                    "status":    "FAIL",
+                    "reason":    f"Metric '{gate_name}' not computed; missing evidence cannot pass",
                     "measured":  None,
                     "threshold": threshold,
                     "op":        op,
@@ -509,6 +529,11 @@ def evaluate_pass_fail(
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> int:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
     parser = argparse.ArgumentParser(
         description="Uberbrain v0.2 Benchmark Runner"
     )

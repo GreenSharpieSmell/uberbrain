@@ -80,12 +80,15 @@ claims:
       - no_correction_write
       - no_consolidate_bleach
     pass_fail:
-      uplift_vs_each_ablation:
+      uplift_vs_modeled_ablations:
         op: ">="
         value: 0.00
       min_success_rate:
         op: ">="
         value: 0.90
+      all_ablations_modeled:
+        op: "=="
+        value: 1.0
 
 adversarial_suite:
   enabled: true
