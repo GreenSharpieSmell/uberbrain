@@ -8,7 +8,7 @@ All equations are literature-grounded with citations.
 
 Functions:
   sellmeier_n()          — refractive index vs wavelength (Malitson 1965)
-  rayleigh_range()       - focal depth limit (validates the reference calculation)
+  rayleigh_range()       — focal depth limit (validates the reference calculation)
   depth_scattering()     — Beer-Lambert attenuation with depth
   thermal_bloom_radius() — Gaussian thermal diffusion radius
   layer_count_estimate() — max holographic layers in a disc of given thickness
@@ -149,7 +149,7 @@ def layer_count_estimate(
     Returns:
         dict with theoretical, practical, and AO-corrected layer counts
 
-    Validates the reference result → 10mm disc, 1030nm, NA=0.5 → ~2000 layers
+    Validates the reference result: 10mm disc, 1030nm, NA=0.5 → ~2000 layers
     """
     if adaptive_optics:
         safety_factor = 1.3
@@ -172,7 +172,7 @@ def layer_count_estimate(
         "layers_theoretical":     int(n_layers_theoretical),
         "layers_practical":       int(n_layers_practical),
         "layers_with_ao":         int(thickness_um / (1.3 * z_r_um)),
-        "reference_validated":       abs(int(n_layers_practical) - 2000) < 200,
+        "reference_validated":    abs(int(n_layers_practical) - 2000) < 200,
     }
 
 
@@ -344,9 +344,9 @@ def validate_against_reference_calc() -> dict:
     layers_match = abs(result["layers_practical"] - 2000) < 300
 
     return {
-        "reference_zr_um":           1.9,
+        "reference_zr_um":        1.9,
         "computed_zr_um":         result["rayleigh_range_um"],
-        "reference_layers":          2000,
+        "reference_layers":       2000,
         "computed_layers":        result["layers_practical"],
         "zr_match":               zr_match,
         "layers_match":           layers_match,

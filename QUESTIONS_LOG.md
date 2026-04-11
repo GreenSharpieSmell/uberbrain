@@ -50,4 +50,22 @@ Technical questions and answers from the founding session and ongoing developmen
 
 ---
 
+**Q (Rocks D. Bear, 2026-04-11):** What real-world and far-fetched perturbations could impact the photon path, storage medium, or readout chain, and how should the project treat effects that seem too unlikely to matter?
+
+**A (Codex):** Added `PERTURBATION_REGISTER.md` as the upstream queue for exhaustive perturbation coverage. Default stance is inclusion: realistic effects get modeled or benchtop-tested in priority order, and speculative effects stay documented with a short dismissal or bound instead of being silently omitted.
+
+---
+
+**Q (Rocks D. Bear, 2026-04-11):** What documentation debt should not get lost while the physics queue is expanding?
+
+**A (Codex):** `README.md` needs a deliberate tone pass. Current top-level framing reads as too aggrandized relative to the present evidence level, so the rewrite should reduce overstatement without deleting the core architecture or validation story.
+
+---
+
+**Q (Rocks D. Bear, 2026-04-11):** Should the README frame this repo only as a new hardware proposal, or also as an experiment in how separate GenAI platforms collaborate on theoretical science?
+
+**A (Codex):** Reframed `README.md` around both goals. The Uberbrain remains the flagship architecture, but the repo now explicitly presents the collaboration process itself as part of the research object: idea generation, disagreement, validation, handoffs, and evidence discipline across Claude, Gemini, Codex, and the human architect.
+
+---
+
 *CC0 — Public Domain. No rights reserved.*
