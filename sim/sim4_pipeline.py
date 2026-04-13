@@ -373,8 +373,12 @@ def _measure_damage_geometry(mask):
         "largest_cluster_share": 0.0,
         "largest_cluster_bbox_fraction": 0.0,
         "largest_cluster_fill_ratio": 0.0,
+        "focus_boundary_share": 0.0,
+        "focus_interior_share": 0.0,
         "geometry_score": 0.0,
         "focus_mask": np.zeros_like(mask, dtype=bool),
+        "focus_boundary_mask": np.zeros_like(mask, dtype=bool),
+        "focus_interior_mask": np.zeros_like(mask, dtype=bool),
         "focus_depth_normalized": np.zeros_like(mask, dtype=float),
     }
     if not np.any(mask):
@@ -388,22 +392,38 @@ def _measure_damage_geometry(mask):
 
     largest_label = int(np.argmax(counts)) + 1
     largest_cluster_size = int(counts[largest_label - 1])
-    focus_mask = labels == largest_label
-    ys, xs = np.where(focus_mask)
+    cluster_focus_mask = labels == largest_label
+    ys, xs = np.where(cluster_focus_mask)
     y0, y1 = int(ys.min()), int(ys.max())
     x0, x1 = int(xs.min()), int(xs.max())
     bbox_area = int((y1 - y0 + 1) * (x1 - x0 + 1))
     total_damaged = int(np.count_nonzero(mask))
-    focus_depth = ndimage.distance_transform_edt(focus_mask)
+    bbox_mask = np.zeros_like(mask, dtype=bool)
+    bbox_mask[y0 : y1 + 1, x0 : x1 + 1] = True
+    focus_depth = ndimage.distance_transform_edt(bbox_mask)
     max_depth = float(focus_depth.max())
     if max_depth > 0:
         focus_depth_normalized = focus_depth / max_depth
     else:
         focus_depth_normalized = np.zeros_like(focus_depth, dtype=float)
+    eroded_focus_mask = ndimage.binary_erosion(
+        bbox_mask,
+        structure=structure,
+        iterations=1,
+        border_value=0,
+    )
+    focus_interior_mask = bbox_mask & eroded_focus_mask
+    focus_boundary_mask = bbox_mask & ~focus_interior_mask
 
     largest_cluster_share = float(largest_cluster_size / max(1, total_damaged))
     largest_cluster_bbox_fraction = float(bbox_area / mask.size)
     largest_cluster_fill_ratio = float(largest_cluster_size / max(1, bbox_area))
+    focus_boundary_share = float(
+        np.count_nonzero(focus_boundary_mask) / max(1, bbox_area)
+    )
+    focus_interior_share = float(
+        np.count_nonzero(focus_interior_mask) / max(1, bbox_area)
+    )
     geometry_score = min(
         1.0,
         0.75 * largest_cluster_share + 0.25 * largest_cluster_fill_ratio,
@@ -413,8 +433,12 @@ def _measure_damage_geometry(mask):
         "largest_cluster_share": largest_cluster_share,
         "largest_cluster_bbox_fraction": largest_cluster_bbox_fraction,
         "largest_cluster_fill_ratio": largest_cluster_fill_ratio,
+        "focus_boundary_share": focus_boundary_share,
+        "focus_interior_share": focus_interior_share,
         "geometry_score": geometry_score,
-        "focus_mask": focus_mask,
+        "focus_mask": bbox_mask,
+        "focus_boundary_mask": focus_boundary_mask,
+        "focus_interior_mask": focus_interior_mask,
         "focus_depth_normalized": focus_depth_normalized,
     }
 
@@ -443,6 +467,8 @@ def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
             "second_pass_focus_bonus": 1.10,
             "first_pass_interior_bias": 0.20,
             "second_pass_interior_bias": 0.80,
+            "boundary_rewrite_gain": 0.52,
+            "interior_rewrite_gain": 0.90,
         },
         "distributed_dropout": {
             "mode_multiplier": 0.90,
@@ -458,6 +484,8 @@ def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
             "second_pass_focus_bonus": 0.40,
             "first_pass_interior_bias": 0.05,
             "second_pass_interior_bias": 0.20,
+            "boundary_rewrite_gain": 0.28,
+            "interior_rewrite_gain": 0.42,
         },
         "phase_noise": {
             "mode_multiplier": 1.08,
@@ -473,6 +501,8 @@ def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
             "second_pass_focus_bonus": 0.12,
             "first_pass_interior_bias": 0.02,
             "second_pass_interior_bias": 0.08,
+            "boundary_rewrite_gain": 0.08,
+            "interior_rewrite_gain": 0.12,
         },
     }
     profile = mode_profiles[scenario["hologram_mode"]]
@@ -535,6 +565,30 @@ def _derive_correction_rates(scenario, damage_profile):
                 0.85,
             )
         ),
+        "boundary_rewrite_fraction": float(
+            np.clip(
+                0.05
+                + (
+                    0.10
+                    + 0.70 * focus_strength * (0.45 + 0.55 * damage_profile["geometry_score"])
+                )
+                * damage_profile["boundary_rewrite_gain"],
+                0.0,
+                0.95,
+            )
+        ),
+        "interior_rewrite_fraction": float(
+            np.clip(
+                0.10
+                + (
+                    0.10
+                    + 0.70 * focus_strength * (0.45 + 0.55 * damage_profile["geometry_score"])
+                )
+                + damage_profile["interior_rewrite_gain"] * focus_strength,
+                0.0,
+                1.0,
+            )
+        ),
         "first_pass_focus_bonus": float(
             damage_profile["first_pass_focus_bonus"] * focus_strength
         ),
@@ -588,26 +642,82 @@ def _build_region_repair_probability_map(
     return np.clip(probability_map, 0.0, 0.98)
 
 
-def _apply_contiguous_region_rewrite(holo_clean, hologram, damage_profile, rewrite_fraction):
-    focus_mask = damage_profile["focus_mask"]
-    diff_mask = np.abs(holo_clean - hologram) > 1e-6
-    rewrite_candidates = focus_mask & diff_mask
-    if not np.any(rewrite_candidates) or rewrite_fraction <= 0.0:
-        return hologram.copy(), 0.0
+def _select_rewrite_region(candidate_mask, score_field, fraction, prefer_high):
+    if not np.any(candidate_mask) or fraction <= 0.0:
+        return np.zeros_like(candidate_mask, dtype=bool)
 
-    depth = damage_profile["focus_depth_normalized"][rewrite_candidates]
-    quantile = float(np.clip(1.0 - rewrite_fraction, 0.0, 1.0))
-    depth_cutoff = float(np.quantile(depth, quantile))
-    rewrite_mask = rewrite_candidates & (
-        damage_profile["focus_depth_normalized"] >= depth_cutoff - 1e-12
+    candidate_scores = score_field[candidate_mask]
+    quantile = float(np.clip(1.0 - fraction if prefer_high else fraction, 0.0, 1.0))
+    cutoff = float(np.quantile(candidate_scores, quantile))
+    if prefer_high:
+        selected_mask = candidate_mask & (score_field >= cutoff - 1e-12)
+    else:
+        selected_mask = candidate_mask & (score_field <= cutoff + 1e-12)
+    if not np.any(selected_mask):
+        selected_mask = candidate_mask
+    return selected_mask
+
+
+def _apply_contiguous_region_rewrite(
+    holo_clean,
+    hologram,
+    damage_profile,
+    boundary_rewrite_fraction,
+    interior_rewrite_fraction,
+):
+    diff_mask = np.abs(holo_clean - hologram) > 1e-6
+    focus_boundary_candidates = diff_mask & damage_profile["focus_boundary_mask"]
+    focus_interior_candidates = diff_mask & damage_profile["focus_interior_mask"]
+    if (
+        not np.any(focus_boundary_candidates)
+        and not np.any(focus_interior_candidates)
+    ):
+        return hologram.copy(), {
+            "total_coverage_fraction": 0.0,
+            "boundary_coverage_fraction": 0.0,
+            "interior_coverage_fraction": 0.0,
+            "boundary_capture_rate": 0.0,
+            "interior_capture_rate": 0.0,
+        }
+
+    normalized_depth = damage_profile["focus_depth_normalized"]
+    boundary_rewrite_mask = _select_rewrite_region(
+        focus_boundary_candidates,
+        normalized_depth,
+        boundary_rewrite_fraction,
+        prefer_high=False,
     )
+    interior_rewrite_mask = _select_rewrite_region(
+        focus_interior_candidates,
+        normalized_depth,
+        interior_rewrite_fraction,
+        prefer_high=True,
+    )
+    rewrite_mask = boundary_rewrite_mask | interior_rewrite_mask
     if not np.any(rewrite_mask):
-        rewrite_mask = rewrite_candidates
+        rewrite_mask = focus_boundary_candidates | focus_interior_candidates
 
     corrected = hologram.copy()
     corrected[rewrite_mask] = holo_clean[rewrite_mask]
-    rewrite_coverage = float(np.count_nonzero(rewrite_mask) / max(1, np.count_nonzero(diff_mask)))
-    return corrected, rewrite_coverage
+    total_damaged = max(1, np.count_nonzero(diff_mask))
+    rewrite_coverage = float(np.count_nonzero(rewrite_mask) / total_damaged)
+    boundary_coverage = float(np.count_nonzero(boundary_rewrite_mask) / total_damaged)
+    interior_coverage = float(np.count_nonzero(interior_rewrite_mask) / total_damaged)
+    boundary_capture_rate = float(
+        np.count_nonzero(boundary_rewrite_mask)
+        / max(1, np.count_nonzero(focus_boundary_candidates))
+    )
+    interior_capture_rate = float(
+        np.count_nonzero(interior_rewrite_mask)
+        / max(1, np.count_nonzero(focus_interior_candidates))
+    )
+    return corrected, {
+        "total_coverage_fraction": rewrite_coverage,
+        "boundary_coverage_fraction": boundary_coverage,
+        "interior_coverage_fraction": interior_coverage,
+        "boundary_capture_rate": boundary_capture_rate,
+        "interior_capture_rate": interior_capture_rate,
+    }
 
 
 def _apply_hologram_correction_pass(
@@ -656,6 +766,10 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
     used_second_pass = False
     rewrite_applied = False
     rewrite_coverage = 0.0
+    boundary_rewrite_coverage = 0.0
+    interior_rewrite_coverage = 0.0
+    boundary_rewrite_capture_rate = 0.0
+    interior_rewrite_capture_rate = 0.0
     rewrite_score = float(score_before)
     first_pass_score = float(score_before)
     second_pass_score = float(score_before)
@@ -678,12 +792,18 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         best_score = float(first_pass_score)
 
     if best_score < FIDELITY_WARN and rates["rewrite_fraction"] > 0.0:
-        rewrite_candidate, rewrite_coverage = _apply_contiguous_region_rewrite(
+        rewrite_candidate, rewrite_meta = _apply_contiguous_region_rewrite(
             holo_clean,
             best_hologram,
             damage_profile,
-            rates["rewrite_fraction"],
+            rates["boundary_rewrite_fraction"],
+            rates["interior_rewrite_fraction"],
         )
+        rewrite_coverage = rewrite_meta["total_coverage_fraction"]
+        boundary_rewrite_coverage = rewrite_meta["boundary_coverage_fraction"]
+        interior_rewrite_coverage = rewrite_meta["interior_coverage_fraction"]
+        boundary_rewrite_capture_rate = rewrite_meta["boundary_capture_rate"]
+        interior_rewrite_capture_rate = rewrite_meta["interior_capture_rate"]
         rewrite_score, _, _ = verify_fidelity(rec_clean, reconstruct(rewrite_candidate))
         rewrite_applied = True
         if rewrite_score >= best_score:
@@ -726,10 +846,18 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         "largest_cluster_bbox_fraction": damage_profile["largest_cluster_bbox_fraction"],
         "largest_cluster_fill_ratio": damage_profile["largest_cluster_fill_ratio"],
         "geometry_score": damage_profile["geometry_score"],
+        "focus_boundary_share": damage_profile["focus_boundary_share"],
+        "focus_interior_share": damage_profile["focus_interior_share"],
         "focus_strength": rates["focus_strength"],
         "rewrite_fraction": rates["rewrite_fraction"],
+        "boundary_rewrite_fraction": rates["boundary_rewrite_fraction"],
+        "interior_rewrite_fraction": rates["interior_rewrite_fraction"],
         "rewrite_applied": rewrite_applied,
         "rewrite_coverage_fraction": rewrite_coverage,
+        "boundary_rewrite_coverage_fraction": boundary_rewrite_coverage,
+        "interior_rewrite_coverage_fraction": interior_rewrite_coverage,
+        "boundary_rewrite_capture_rate": boundary_rewrite_capture_rate,
+        "interior_rewrite_capture_rate": interior_rewrite_capture_rate,
         "first_pass_score": float(first_pass_score),
         "rewrite_score": float(rewrite_score),
         "second_pass_score": float(second_pass_score),
@@ -898,10 +1026,18 @@ def simulate_pipeline_trial(
         "largest_cluster_bbox_fraction": damage_profile["largest_cluster_bbox_fraction"],
         "largest_cluster_fill_ratio": damage_profile["largest_cluster_fill_ratio"],
         "geometry_score": damage_profile["geometry_score"],
+        "focus_boundary_share": damage_profile["focus_boundary_share"],
+        "focus_interior_share": damage_profile["focus_interior_share"],
         "focus_strength": correction_rates["focus_strength"],
         "rewrite_fraction": correction_rates["rewrite_fraction"],
+        "boundary_rewrite_fraction": correction_rates["boundary_rewrite_fraction"],
+        "interior_rewrite_fraction": correction_rates["interior_rewrite_fraction"],
         "rewrite_applied": False,
         "rewrite_coverage_fraction": 0.0,
+        "boundary_rewrite_coverage_fraction": 0.0,
+        "interior_rewrite_coverage_fraction": 0.0,
+        "boundary_rewrite_capture_rate": 0.0,
+        "interior_rewrite_capture_rate": 0.0,
         "first_pass_score": float(score_before),
         "rewrite_score": float(score_before),
         "second_pass_score": float(score_before),
@@ -988,6 +1124,12 @@ def simulate_pipeline_trial(
         "hologram_largest_cluster_fill_ratio": float(
             correction_meta["largest_cluster_fill_ratio"]
         ),
+        "hologram_focus_boundary_share": float(
+            correction_meta["focus_boundary_share"]
+        ),
+        "hologram_focus_interior_share": float(
+            correction_meta["focus_interior_share"]
+        ),
         "hologram_threshold_crossed_after_recovery": int(
             correction_meta["threshold_crossed_after_recovery"]
         ),
@@ -996,9 +1138,27 @@ def simulate_pipeline_trial(
         "correction_used_second_pass": int(correction_meta["used_second_pass"]),
         "correction_focus_strength": float(correction_meta["focus_strength"]),
         "correction_rewrite_fraction": float(correction_meta["rewrite_fraction"]),
+        "correction_boundary_rewrite_fraction": float(
+            correction_meta["boundary_rewrite_fraction"]
+        ),
+        "correction_interior_rewrite_fraction": float(
+            correction_meta["interior_rewrite_fraction"]
+        ),
         "correction_rewrite_applied": int(correction_meta["rewrite_applied"]),
         "correction_rewrite_coverage_fraction": float(
             correction_meta["rewrite_coverage_fraction"]
+        ),
+        "correction_boundary_rewrite_coverage_fraction": float(
+            correction_meta["boundary_rewrite_coverage_fraction"]
+        ),
+        "correction_interior_rewrite_coverage_fraction": float(
+            correction_meta["interior_rewrite_coverage_fraction"]
+        ),
+        "correction_boundary_rewrite_capture_rate": float(
+            correction_meta["boundary_rewrite_capture_rate"]
+        ),
+        "correction_interior_rewrite_capture_rate": float(
+            correction_meta["interior_rewrite_capture_rate"]
         ),
         "correction_first_pass_rate": float(correction_meta["first_pass_rate"]),
         "correction_second_pass_rate": float(correction_meta["second_pass_rate"]),

@@ -418,10 +418,18 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     largest_cluster_shares = []
     largest_cluster_bbox_fractions = []
     largest_cluster_fill_ratios = []
+    focus_boundary_shares = []
+    focus_interior_shares = []
     focus_strengths = []
     rewrite_fractions = []
+    boundary_rewrite_fractions = []
+    interior_rewrite_fractions = []
     rewrite_usage_flags = []
     rewrite_coverage_fractions = []
+    boundary_rewrite_coverage_fractions = []
+    interior_rewrite_coverage_fractions = []
+    boundary_rewrite_capture_rates = []
+    interior_rewrite_capture_rates = []
     correction_attempts = []
     second_pass_flags = []
     first_pass_recovery_deltas = []
@@ -478,11 +486,31 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         largest_cluster_fill_ratios.append(
             float(full["hologram_largest_cluster_fill_ratio"])
         )
+        focus_boundary_shares.append(float(full["hologram_focus_boundary_share"]))
+        focus_interior_shares.append(float(full["hologram_focus_interior_share"]))
         focus_strengths.append(float(full["correction_focus_strength"]))
         rewrite_fractions.append(float(full["correction_rewrite_fraction"]))
+        boundary_rewrite_fractions.append(
+            float(full["correction_boundary_rewrite_fraction"])
+        )
+        interior_rewrite_fractions.append(
+            float(full["correction_interior_rewrite_fraction"])
+        )
         rewrite_usage_flags.append(float(full["correction_rewrite_applied"]))
         rewrite_coverage_fractions.append(
             float(full["correction_rewrite_coverage_fraction"])
+        )
+        boundary_rewrite_coverage_fractions.append(
+            float(full["correction_boundary_rewrite_coverage_fraction"])
+        )
+        interior_rewrite_coverage_fractions.append(
+            float(full["correction_interior_rewrite_coverage_fraction"])
+        )
+        boundary_rewrite_capture_rates.append(
+            float(full["correction_boundary_rewrite_capture_rate"])
+        )
+        interior_rewrite_capture_rates.append(
+            float(full["correction_interior_rewrite_capture_rate"])
         )
         correction_attempts.append(float(full["correction_attempts_used"]))
         second_pass_flags.append(float(full["correction_used_second_pass"]))
@@ -557,6 +585,14 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["hologram_largest_cluster_fill_ratio"]),
                 6,
             ),
+            "hologram_focus_boundary_share": round(
+                float(full["hologram_focus_boundary_share"]),
+                6,
+            ),
+            "hologram_focus_interior_share": round(
+                float(full["hologram_focus_interior_share"]),
+                6,
+            ),
             "hologram_threshold_crossed_after_recovery": int(
                 full["hologram_threshold_crossed_after_recovery"]
             ),
@@ -570,9 +606,33 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["correction_rewrite_fraction"]),
                 6,
             ),
+            "correction_boundary_rewrite_fraction": round(
+                float(full["correction_boundary_rewrite_fraction"]),
+                6,
+            ),
+            "correction_interior_rewrite_fraction": round(
+                float(full["correction_interior_rewrite_fraction"]),
+                6,
+            ),
             "correction_rewrite_applied": int(full["correction_rewrite_applied"]),
             "correction_rewrite_coverage_fraction": round(
                 float(full["correction_rewrite_coverage_fraction"]),
+                6,
+            ),
+            "correction_boundary_rewrite_coverage_fraction": round(
+                float(full["correction_boundary_rewrite_coverage_fraction"]),
+                6,
+            ),
+            "correction_interior_rewrite_coverage_fraction": round(
+                float(full["correction_interior_rewrite_coverage_fraction"]),
+                6,
+            ),
+            "correction_boundary_rewrite_capture_rate": round(
+                float(full["correction_boundary_rewrite_capture_rate"]),
+                6,
+            ),
+            "correction_interior_rewrite_capture_rate": round(
+                float(full["correction_interior_rewrite_capture_rate"]),
                 6,
             ),
             "correction_first_pass_recovery_delta": round(
@@ -696,6 +756,14 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             bench_metrics.mean(largest_cluster_fill_ratios),
             6,
         ),
+        "avg_hologram_focus_boundary_share": round(
+            bench_metrics.mean(focus_boundary_shares),
+            6,
+        ),
+        "avg_hologram_focus_interior_share": round(
+            bench_metrics.mean(focus_interior_shares),
+            6,
+        ),
         "avg_correction_attempts_used": round(
             bench_metrics.mean(correction_attempts),
             6,
@@ -705,9 +773,33 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             bench_metrics.mean(rewrite_fractions),
             6,
         ),
+        "avg_correction_boundary_rewrite_fraction": round(
+            bench_metrics.mean(boundary_rewrite_fractions),
+            6,
+        ),
+        "avg_correction_interior_rewrite_fraction": round(
+            bench_metrics.mean(interior_rewrite_fractions),
+            6,
+        ),
         "rewrite_usage_rate": round(bench_metrics.mean(rewrite_usage_flags), 6),
         "avg_correction_rewrite_coverage_fraction": round(
             bench_metrics.mean(rewrite_coverage_fractions),
+            6,
+        ),
+        "avg_correction_boundary_rewrite_coverage_fraction": round(
+            bench_metrics.mean(boundary_rewrite_coverage_fractions),
+            6,
+        ),
+        "avg_correction_interior_rewrite_coverage_fraction": round(
+            bench_metrics.mean(interior_rewrite_coverage_fractions),
+            6,
+        ),
+        "avg_correction_boundary_rewrite_capture_rate": round(
+            bench_metrics.mean(boundary_rewrite_capture_rates),
+            6,
+        ),
+        "avg_correction_interior_rewrite_capture_rate": round(
+            bench_metrics.mean(interior_rewrite_capture_rates),
             6,
         ),
         "second_pass_usage_rate": round(bench_metrics.mean(second_pass_flags), 6),

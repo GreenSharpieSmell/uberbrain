@@ -138,11 +138,19 @@ def test_sim4_trial_reports_failure_fields():
     assert "hologram_geometry_score" in result
     assert "hologram_damage_cluster_count" in result
     assert "hologram_largest_cluster_share" in result
+    assert "hologram_focus_boundary_share" in result
+    assert "hologram_focus_interior_share" in result
     assert "hologram_threshold_crossed_after_recovery" in result
     assert "correction_attempts_used" in result
     assert "correction_focus_strength" in result
     assert "correction_rewrite_applied" in result
+    assert "correction_boundary_rewrite_fraction" in result
+    assert "correction_interior_rewrite_fraction" in result
     assert "correction_rewrite_coverage_fraction" in result
+    assert "correction_boundary_rewrite_coverage_fraction" in result
+    assert "correction_interior_rewrite_coverage_fraction" in result
+    assert "correction_boundary_rewrite_capture_rate" in result
+    assert "correction_interior_rewrite_capture_rate" in result
     assert "correction_rewrite_recovery_delta" in result
     assert "correction_total_recovery_delta" in result
     assert result["failure_reason"]
@@ -153,11 +161,24 @@ def test_sim4_trial_reports_failure_fields():
     assert result["hologram_geometry_score"] >= 0.0
     assert result["hologram_damage_cluster_count"] >= 0
     assert 0.0 <= result["hologram_largest_cluster_share"] <= 1.0
+    assert 0.0 <= result["hologram_focus_boundary_share"] <= 1.0
+    assert 0.0 <= result["hologram_focus_interior_share"] <= 1.0
+    assert (
+        result["hologram_focus_boundary_share"]
+        + result["hologram_focus_interior_share"]
+        <= 1.0 + 1e-9
+    )
     assert result["hologram_threshold_crossed_after_recovery"] in {0, 1}
     assert result["correction_attempts_used"] <= result["correction_attempts_planned"]
     assert result["correction_focus_strength"] >= 0.0
     assert result["correction_rewrite_applied"] in {0, 1}
+    assert result["correction_boundary_rewrite_fraction"] >= 0.0
+    assert result["correction_interior_rewrite_fraction"] >= 0.0
     assert result["correction_rewrite_coverage_fraction"] >= 0.0
+    assert result["correction_boundary_rewrite_coverage_fraction"] >= 0.0
+    assert result["correction_interior_rewrite_coverage_fraction"] >= 0.0
+    assert result["correction_boundary_rewrite_capture_rate"] >= 0.0
+    assert result["correction_interior_rewrite_capture_rate"] >= 0.0
     assert result["correction_rewrite_recovery_delta"] >= 0.0
     assert result["correction_total_recovery_delta"] >= 0.0
 
@@ -205,6 +226,11 @@ def test_sim4_block_dropout_uses_contiguous_rewrite_when_repair_is_triggered():
     assert result["ssim_before"] < sim4.FIDELITY_WARN
     assert result["correction_rewrite_applied"] == 1
     assert result["correction_rewrite_coverage_fraction"] > 0.0
+    assert result["correction_interior_rewrite_fraction"] >= result["correction_boundary_rewrite_fraction"]
+    assert (
+        result["correction_interior_rewrite_capture_rate"]
+        >= result["correction_boundary_rewrite_capture_rate"]
+    )
     assert result["correction_rewrite_recovery_delta"] >= 0.0
 
 
