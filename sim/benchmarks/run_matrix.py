@@ -410,6 +410,19 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     no_correction_successes = []
     no_consolidate_successes = []
     failure_counts: Dict[str, int] = {}
+    damage_fractions = []
+    missing_fractions = []
+    severity_scores = []
+    correction_attempts = []
+    second_pass_flags = []
+    first_pass_recovery_deltas = []
+    second_pass_recovery_deltas = []
+    total_recovery_deltas = []
+    mode_metrics: Dict[str, Dict[str, list[float]]] = {
+        "block_dropout": {"successes": [], "recovery_deltas": []},
+        "distributed_dropout": {"successes": [], "recovery_deltas": []},
+        "phase_noise": {"successes": [], "recovery_deltas": []},
+    }
 
     for trial in range(n_trials):
         scenario = sim4.sample_pipeline_scenario(seed + trial)
@@ -442,6 +455,23 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         no_verify_successes.append(no_verify["overall_success"])
         no_correction_successes.append(no_correction["overall_success"])
         no_consolidate_successes.append(no_consolidate["overall_success"])
+        damage_fractions.append(float(full["hologram_damage_fraction"]))
+        missing_fractions.append(float(full["hologram_missing_fraction"]))
+        severity_scores.append(float(full["hologram_severity_score"]))
+        correction_attempts.append(float(full["correction_attempts_used"]))
+        second_pass_flags.append(float(full["correction_used_second_pass"]))
+        first_pass_recovery_deltas.append(
+            float(full["correction_first_pass_recovery_delta"])
+        )
+        second_pass_recovery_deltas.append(
+            float(full["correction_second_pass_recovery_delta"])
+        )
+        total_recovery_deltas.append(float(full["correction_total_recovery_delta"]))
+        mode_bucket = mode_metrics[scenario["hologram_mode"]]
+        mode_bucket["successes"].append(float(full["overall_success"]))
+        mode_bucket["recovery_deltas"].append(
+            float(full["correction_total_recovery_delta"])
+        )
 
         if full["failure_reason"] != "none":
             failure_counts[full["failure_reason"]] = (
@@ -463,6 +493,32 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             "ssim_no_correction_write": round(float(no_correction["ssim_after"]), 6),
             "ssim_no_consolidate_bleach": round(
                 float(no_consolidate["ssim_after"]),
+                6,
+            ),
+            "hologram_damage_fraction": round(
+                float(full["hologram_damage_fraction"]),
+                6,
+            ),
+            "hologram_missing_fraction": round(
+                float(full["hologram_missing_fraction"]),
+                6,
+            ),
+            "hologram_severity_score": round(
+                float(full["hologram_severity_score"]),
+                6,
+            ),
+            "correction_attempts_used": int(full["correction_attempts_used"]),
+            "correction_used_second_pass": int(full["correction_used_second_pass"]),
+            "correction_first_pass_recovery_delta": round(
+                float(full["correction_first_pass_recovery_delta"]),
+                6,
+            ),
+            "correction_second_pass_recovery_delta": round(
+                float(full["correction_second_pass_recovery_delta"]),
+                6,
+            ),
+            "correction_total_recovery_delta": round(
+                float(full["correction_total_recovery_delta"]),
                 6,
             ),
             "graph_critical_ratio_pipeline": round(
@@ -505,6 +561,20 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         mean_uplift_no_correct,
         mean_uplift_no_consolidate,
     )
+    block_success_rate = bench_metrics.mean(mode_metrics["block_dropout"]["successes"])
+    distributed_success_rate = bench_metrics.mean(
+        mode_metrics["distributed_dropout"]["successes"]
+    )
+    phase_success_rate = bench_metrics.mean(mode_metrics["phase_noise"]["successes"])
+    block_recovery_delta = bench_metrics.mean(
+        mode_metrics["block_dropout"]["recovery_deltas"]
+    )
+    distributed_recovery_delta = bench_metrics.mean(
+        mode_metrics["distributed_dropout"]["recovery_deltas"]
+    )
+    phase_recovery_delta = bench_metrics.mean(
+        mode_metrics["phase_noise"]["recovery_deltas"]
+    )
 
     rows.append({
         "claim": "c4_sim4_pipeline",
@@ -527,6 +597,35 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         ),
         "min_success_rate": round(full_success_rate, 6),
         "pipeline_failure_rate": round(1.0 - full_success_rate, 6),
+        "avg_hologram_damage_fraction": round(bench_metrics.mean(damage_fractions), 6),
+        "avg_hologram_missing_fraction": round(
+            bench_metrics.mean(missing_fractions),
+            6,
+        ),
+        "avg_hologram_severity_score": round(bench_metrics.mean(severity_scores), 6),
+        "avg_correction_attempts_used": round(
+            bench_metrics.mean(correction_attempts),
+            6,
+        ),
+        "second_pass_usage_rate": round(bench_metrics.mean(second_pass_flags), 6),
+        "avg_first_pass_recovery_delta": round(
+            bench_metrics.mean(first_pass_recovery_deltas),
+            6,
+        ),
+        "avg_second_pass_recovery_delta": round(
+            bench_metrics.mean(second_pass_recovery_deltas),
+            6,
+        ),
+        "avg_total_recovery_delta": round(
+            bench_metrics.mean(total_recovery_deltas),
+            6,
+        ),
+        "block_dropout_success_rate": round(block_success_rate, 6),
+        "distributed_dropout_success_rate": round(distributed_success_rate, 6),
+        "phase_noise_success_rate": round(phase_success_rate, 6),
+        "block_dropout_recovery_delta": round(block_recovery_delta, 6),
+        "distributed_dropout_recovery_delta": round(distributed_recovery_delta, 6),
+        "phase_noise_recovery_delta": round(phase_recovery_delta, 6),
         "failure_count_multi_stage": int(
             failure_counts.get("multi_stage_failure", 0)
         ),

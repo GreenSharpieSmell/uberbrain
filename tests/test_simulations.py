@@ -132,8 +132,40 @@ def test_sim4_trial_reports_failure_fields():
     assert "failure_detail" in result
     assert "graph_critical_ratio" in result
     assert "graph_repair_backlog_ratio" in result
+    assert "hologram_damage_fraction" in result
+    assert "hologram_missing_fraction" in result
+    assert "hologram_severity_score" in result
+    assert "correction_attempts_used" in result
+    assert "correction_total_recovery_delta" in result
     assert result["failure_reason"]
     assert result["failure_detail"]
+    assert result["hologram_damage_fraction"] >= 0.0
+    assert result["hologram_missing_fraction"] >= 0.0
+    assert result["hologram_severity_score"] >= 0.0
+    assert result["correction_attempts_used"] <= result["correction_attempts_planned"]
+    assert result["correction_total_recovery_delta"] >= 0.0
+
+
+def test_sim4_correction_path_never_lowers_best_hologram_score():
+    scenario = sim4.sample_pipeline_scenario(42)
+    scenario.update({
+        "hologram_mode": "block_dropout",
+        "corrupt_size": 46,
+        "corrupt_x": 18,
+        "corrupt_y": 18,
+        "max_correction_passes": 2,
+    })
+
+    result = sim4.simulate_pipeline_trial(
+        scenario,
+        enable_verify=True,
+        enable_correction_write=True,
+        enable_consolidate_bleach=True,
+    )
+
+    assert result["ssim_after"] >= result["ssim_before"] - 1e-9
+    assert result["correction_total_recovery_delta"] >= 0.0
+    assert result["correction_second_pass_recovery_delta"] >= 0.0
 
 
 def test_sim4_no_consolidate_worsens_graph_health_under_stress():

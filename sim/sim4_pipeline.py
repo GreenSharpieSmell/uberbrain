@@ -250,6 +250,7 @@ def sample_pipeline_scenario(seed):
         "phase_sigma": float(rng.uniform(0.08, 0.28)),
         "correction_success_rate": float(rng.uniform(0.45, 0.9)),
         "residual_noise_sigma": float(rng.uniform(0.0, 0.02)),
+        "max_correction_passes": 2,
         "oomphlap_bits": [int(x) for x in rng.integers(0, 2, 3)],
         "oomphlap_sigma": float(rng.uniform(0.01, 0.08)),
         "oomphlap_crosstalk": float(rng.uniform(0.0, 0.12)),
@@ -365,16 +366,92 @@ def _apply_hologram_perturbation(holo_clean, scenario):
     return np.clip(normalize_field(perturbed), 0.0, 1.0)
 
 
-def _partially_correct_hologram(holo_clean, holo_corrupt, scenario):
-    rng = np.random.default_rng(scenario["seed"] + 4001)
-    corrected = holo_corrupt.copy()
-    diff_mask = np.abs(holo_clean - holo_corrupt) > 1e-6
-    repair_mask = diff_mask & (
-        rng.random(holo_clean.shape) < scenario["correction_success_rate"]
+def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
+    diff = np.abs(holo_clean - holo_corrupt)
+    diff_mask = diff > 1e-6
+    damage_fraction = float(np.mean(diff_mask))
+    mean_abs_delta = float(diff[diff_mask].mean()) if np.any(diff_mask) else 0.0
+    missing_fraction = float(
+        np.mean(diff_mask & (holo_corrupt < 0.02) & (holo_clean > 0.08))
     )
+
+    mode_profiles = {
+        "block_dropout": {
+            "mode_multiplier": 0.72,
+            "damage_weight": 0.30,
+            "missing_weight": 3.10,
+            "delta_weight": 0.85,
+            "second_pass_bonus": 0.22,
+            "noise_scale": 1.15,
+        },
+        "distributed_dropout": {
+            "mode_multiplier": 0.90,
+            "damage_weight": 0.16,
+            "missing_weight": 1.70,
+            "delta_weight": 0.60,
+            "second_pass_bonus": 0.18,
+            "noise_scale": 0.90,
+        },
+        "phase_noise": {
+            "mode_multiplier": 1.08,
+            "damage_weight": 0.05,
+            "missing_weight": 0.40,
+            "delta_weight": 0.35,
+            "second_pass_bonus": 0.08,
+            "noise_scale": 0.55,
+        },
+    }
+    profile = mode_profiles[scenario["hologram_mode"]]
+    severity_score = min(
+        1.0,
+        damage_fraction * profile["damage_weight"]
+        + missing_fraction * profile["missing_weight"]
+        + mean_abs_delta * profile["delta_weight"],
+    )
+
+    return {
+        "damage_fraction": damage_fraction,
+        "mean_abs_delta": mean_abs_delta,
+        "missing_fraction": missing_fraction,
+        "severity_score": severity_score,
+        **profile,
+    }
+
+
+def _derive_correction_rates(scenario, damage_profile):
+    base_rate = scenario["correction_success_rate"]
+    severity_penalty = 1.0 - (0.65 * damage_profile["severity_score"])
+    first_pass_rate = float(np.clip(
+        base_rate * damage_profile["mode_multiplier"] * severity_penalty,
+        0.05,
+        0.98,
+    ))
+    second_pass_rate = float(np.clip(
+        first_pass_rate
+        + damage_profile["second_pass_bonus"] * (1.0 - damage_profile["severity_score"]),
+        0.05,
+        0.98,
+    ))
+    first_pass_noise = float(
+        scenario["residual_noise_sigma"]
+        * (1.0 + damage_profile["noise_scale"] * damage_profile["severity_score"])
+    )
+    second_pass_noise = first_pass_noise * 0.60
+    return {
+        "first_pass_rate": first_pass_rate,
+        "second_pass_rate": second_pass_rate,
+        "first_pass_noise": first_pass_noise,
+        "second_pass_noise": second_pass_noise,
+    }
+
+
+def _apply_hologram_correction_pass(holo_clean, hologram, repair_rate, residual_sigma, seed):
+    rng = np.random.default_rng(seed)
+    corrected = hologram.copy()
+    diff_mask = np.abs(holo_clean - hologram) > 1e-6
+    repair_mask = diff_mask & (rng.random(holo_clean.shape) < repair_rate)
     corrected[repair_mask] = holo_clean[repair_mask]
 
-    residual_sigma = scenario["residual_noise_sigma"]
     if residual_sigma > 0:
         corrected = np.clip(
             corrected + rng.normal(0.0, residual_sigma, corrected.shape),
@@ -382,6 +459,70 @@ def _partially_correct_hologram(holo_clean, holo_corrupt, scenario):
             1.0,
         )
     return corrected
+
+
+def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenario):
+    damage_profile = _measure_hologram_damage(holo_clean, holo_corrupt, scenario)
+    rates = _derive_correction_rates(scenario, damage_profile)
+    attempts_planned = max(1, int(scenario.get("max_correction_passes", 2)))
+
+    best_hologram = holo_corrupt
+    best_score = float(score_before)
+    attempts_used = 0
+    used_second_pass = False
+    first_pass_score = float(score_before)
+    second_pass_score = float(score_before)
+
+    first_candidate = _apply_hologram_correction_pass(
+        holo_clean,
+        best_hologram,
+        rates["first_pass_rate"],
+        rates["first_pass_noise"],
+        scenario["seed"] + 4001,
+    )
+    attempts_used = 1
+    first_pass_score, _, _ = verify_fidelity(rec_clean, reconstruct(first_candidate))
+    if first_pass_score >= best_score:
+        best_hologram = first_candidate
+        best_score = float(first_pass_score)
+
+    if attempts_planned > 1 and best_score < FIDELITY_WARN:
+        second_candidate = _apply_hologram_correction_pass(
+            holo_clean,
+            best_hologram,
+            rates["second_pass_rate"],
+            rates["second_pass_noise"],
+            scenario["seed"] + 4002,
+        )
+        attempts_used = 2
+        used_second_pass = True
+        second_pass_score, _, _ = verify_fidelity(rec_clean, reconstruct(second_candidate))
+        if second_pass_score >= best_score:
+            best_hologram = second_candidate
+            best_score = float(second_pass_score)
+    else:
+        second_pass_score = float(best_score)
+
+    return best_hologram, {
+        "attempts_planned": attempts_planned,
+        "attempts_used": attempts_used,
+        "used_second_pass": used_second_pass,
+        "first_pass_rate": rates["first_pass_rate"],
+        "second_pass_rate": rates["second_pass_rate"],
+        "damage_fraction": damage_profile["damage_fraction"],
+        "missing_fraction": damage_profile["missing_fraction"],
+        "mean_abs_delta": damage_profile["mean_abs_delta"],
+        "severity_score": damage_profile["severity_score"],
+        "first_pass_score": float(first_pass_score),
+        "second_pass_score": float(second_pass_score),
+        "final_score": float(best_score),
+        "first_pass_recovery_delta": max(0.0, float(first_pass_score - score_before)),
+        "second_pass_recovery_delta": max(
+            0.0,
+            float(best_score - max(score_before, first_pass_score)),
+        ),
+        "total_recovery_delta": max(0.0, float(best_score - score_before)),
+    }
 
 
 def _count_critical_nodes(G):
@@ -511,14 +652,44 @@ def simulate_pipeline_trial(
     holo_corrupt = _apply_hologram_perturbation(holo_clean, scenario)
     rec_corrupt = reconstruct(holo_corrupt)
     score_before, _, intact_before = verify_fidelity(rec_clean, rec_corrupt)
+    damage_profile = _measure_hologram_damage(holo_clean, holo_corrupt, scenario)
+    correction_rates = _derive_correction_rates(scenario, damage_profile)
+    correction_meta = {
+        "attempts_planned": (
+            max(1, int(scenario.get("max_correction_passes", 2)))
+            if enable_verify and not intact_before and enable_correction_write
+            else 0
+        ),
+        "attempts_used": 0,
+        "used_second_pass": False,
+        "first_pass_rate": correction_rates["first_pass_rate"],
+        "second_pass_rate": correction_rates["second_pass_rate"],
+        "damage_fraction": damage_profile["damage_fraction"],
+        "missing_fraction": damage_profile["missing_fraction"],
+        "mean_abs_delta": damage_profile["mean_abs_delta"],
+        "severity_score": damage_profile["severity_score"],
+        "first_pass_score": float(score_before),
+        "second_pass_score": float(score_before),
+        "final_score": float(score_before),
+        "first_pass_recovery_delta": 0.0,
+        "second_pass_recovery_delta": 0.0,
+        "total_recovery_delta": 0.0,
+    }
 
     if enable_verify and not intact_before and enable_correction_write:
-        holo_final = _partially_correct_hologram(holo_clean, holo_corrupt, scenario)
+        holo_final, correction_meta = _recover_hologram(
+            holo_clean,
+            holo_corrupt,
+            rec_clean,
+            score_before,
+            scenario,
+        )
     else:
         holo_final = holo_corrupt
 
     rec_final = reconstruct(holo_final)
     score_after, _, intact_after = verify_fidelity(rec_clean, rec_final)
+    correction_meta["final_score"] = float(score_after)
 
     if intact_after:
         hologram_failure = "none"
@@ -565,6 +736,26 @@ def simulate_pipeline_trial(
         "ssim_before": float(score_before),
         "ssim_after": float(score_after),
         "hologram_success": int(intact_after),
+        "hologram_damage_fraction": float(correction_meta["damage_fraction"]),
+        "hologram_missing_fraction": float(correction_meta["missing_fraction"]),
+        "hologram_mean_abs_delta": float(correction_meta["mean_abs_delta"]),
+        "hologram_severity_score": float(correction_meta["severity_score"]),
+        "correction_attempts_planned": int(correction_meta["attempts_planned"]),
+        "correction_attempts_used": int(correction_meta["attempts_used"]),
+        "correction_used_second_pass": int(correction_meta["used_second_pass"]),
+        "correction_first_pass_rate": float(correction_meta["first_pass_rate"]),
+        "correction_second_pass_rate": float(correction_meta["second_pass_rate"]),
+        "correction_first_pass_score": float(correction_meta["first_pass_score"]),
+        "correction_second_pass_score": float(correction_meta["second_pass_score"]),
+        "correction_total_recovery_delta": float(
+            correction_meta["total_recovery_delta"]
+        ),
+        "correction_first_pass_recovery_delta": float(
+            correction_meta["first_pass_recovery_delta"]
+        ),
+        "correction_second_pass_recovery_delta": float(
+            correction_meta["second_pass_recovery_delta"]
+        ),
         "oomphlap_success": int(oomphlap_result["success"]),
         "graph_success": int(graph_result["success"]),
         "graph_critical_ratio": float(graph_result["critical_ratio"]),
