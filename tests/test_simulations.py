@@ -165,12 +165,17 @@ def test_sim4_trial_reports_failure_fields():
     assert "correction_rewrite_recovery_delta" in result
     assert "correction_total_recovery_delta" in result
     assert "correction_best_stage" in result
+    assert "oomphlap_channel_failure" in result
+    assert "oomphlap_failed_channel" in result
     assert "oomphlap_initial_bit_error_count" in result
     assert "oomphlap_final_bit_error_count" in result
     assert "oomphlap_min_threshold_distance" in result
     assert "oomphlap_verify_flag" in result
     assert "oomphlap_verify_trigger_margin" in result
     assert "oomphlap_verify_trigger_channel_failure" in result
+    assert "oomphlap_retry_strategy" in result
+    assert "oomphlap_retry_candidate_count" in result
+    assert "oomphlap_retry_targeted_success_rate" in result
     assert "oomphlap_retry_attempted" in result
     assert "oomphlap_retry_succeeded" in result
     assert "oomphlap_retry_draw_minus_success_rate" in result
@@ -216,6 +221,8 @@ def test_sim4_trial_reports_failure_fields():
     assert result["correction_rewrite_recovery_delta"] >= 0.0
     assert result["correction_total_recovery_delta"] >= 0.0
     assert result["correction_best_stage"] in {"pre", "first_pass", "rewrite", "second_pass"}
+    assert result["oomphlap_channel_failure"] in {"none", "stuck_low", "stuck_high", "random"}
+    assert result["oomphlap_failed_channel"] >= -1
     assert result["oomphlap_initial_bit_error_count"] >= 0
     assert result["oomphlap_final_bit_error_count"] >= 0
     assert result["oomphlap_final_bit_error_count"] <= result["oomphlap_initial_bit_error_count"]
@@ -223,6 +230,14 @@ def test_sim4_trial_reports_failure_fields():
     assert result["oomphlap_verify_flag"] in {0, 1}
     assert result["oomphlap_verify_trigger_margin"] in {0, 1}
     assert result["oomphlap_verify_trigger_channel_failure"] in {0, 1}
+    assert result["oomphlap_retry_strategy"] in {
+        "none",
+        "targeted_channel_rewrite",
+        "margin_guard_rewrite",
+        "generic_retry",
+    }
+    assert result["oomphlap_retry_candidate_count"] >= 0
+    assert 0.0 <= result["oomphlap_retry_targeted_success_rate"] <= 0.995
     assert result["oomphlap_retry_attempted"] in {0, 1}
     assert result["oomphlap_retry_succeeded"] in {0, 1}
 
@@ -321,6 +336,8 @@ def test_sim4_oomphlap_retry_telemetry_reports_forced_failure():
 
     assert result["oomphlap_verify_flag"] == 1
     assert result["oomphlap_verify_trigger_channel_failure"] == 1
+    assert result["oomphlap_retry_strategy"] == "targeted_channel_rewrite"
+    assert result["oomphlap_retry_candidate_count"] == 1
     assert result["oomphlap_retry_attempted"] == 1
     assert result["oomphlap_retry_succeeded"] == 0
     assert result["oomphlap_initial_bit_error_count"] > 0
@@ -349,9 +366,31 @@ def test_sim4_oomphlap_retry_telemetry_reports_forced_success():
     )
 
     assert result["oomphlap_verify_flag"] == 1
+    assert result["oomphlap_retry_strategy"] == "targeted_channel_rewrite"
+    assert result["oomphlap_retry_candidate_count"] == 1
+    assert result["oomphlap_retry_targeted_success_rate"] > 0.99
     assert result["oomphlap_retry_attempted"] == 1
     assert result["oomphlap_retry_succeeded"] == 1
     assert result["oomphlap_final_bit_error_count"] == 0
+
+
+def test_sim4_oomphlap_retry_plan_targets_explicit_channel_failures():
+    scenario = sim4.sample_pipeline_scenario(42)
+    noisy_levels = [0.0, 0.72, 0.72]
+    plan = sim4._derive_oomphlap_retry_plan(
+        bits=[1, 1, 1],
+        decoded=[0, 1, 1],
+        noisy_levels=noisy_levels,
+        scenario=scenario,
+        failure_mode="stuck_low",
+        failed_channel=0,
+        verify_trigger_margin=False,
+        verify_trigger_channel_failure=True,
+    )
+
+    assert plan["strategy"] == "targeted_channel_rewrite"
+    assert plan["candidate_indices"] == [0]
+    assert plan["targeted_success_rate"] > scenario["oomphlap_retry_success_rate"]
 
 
 def test_sim4_block_dropout_geometry_is_more_clustered_than_distributed_dropout():

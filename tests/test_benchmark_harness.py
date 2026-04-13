@@ -428,9 +428,16 @@ class TestRunMatrixClaimRigor:
         assert "avg_oomphlap_initial_bit_error_count" in summary
         assert "avg_oomphlap_final_bit_error_count" in summary
         assert "avg_oomphlap_min_threshold_distance" in summary
+        assert "avg_oomphlap_retry_targeted_success_rate" in summary
         assert "oomphlap_verify_rate" in summary
         assert "oomphlap_verify_margin_trigger_rate" in summary
         assert "oomphlap_verify_channel_failure_trigger_rate" in summary
+        assert "oomphlap_retry_targeted_strategy_rate" in summary
+        assert "oomphlap_retry_margin_strategy_rate" in summary
+        assert "oomphlap_retry_generic_strategy_rate" in summary
+        assert "oomphlap_channel_failure_stuck_low_rate" in summary
+        assert "oomphlap_channel_failure_stuck_high_rate" in summary
+        assert "oomphlap_channel_failure_random_rate" in summary
         assert "oomphlap_retry_attempt_rate" in summary
         assert "oomphlap_retry_success_rate_given_attempt" in summary
         assert "avg_failed_oomphlap_retry_draw_minus_success_rate" in summary
@@ -469,15 +476,21 @@ class TestRunMatrixClaimRigor:
         assert "correction_rewrite_recovery_delta" in trial_row
         assert "correction_total_recovery_delta" in trial_row
         assert "correction_best_stage" in trial_row
+        assert "oomphlap_channel_failure" in trial_row
+        assert "oomphlap_failed_channel" in trial_row
         assert "oomphlap_initial_bit_error_count" in trial_row
         assert "oomphlap_final_bit_error_count" in trial_row
         assert "oomphlap_min_threshold_distance" in trial_row
         assert "oomphlap_verify_flag" in trial_row
         assert "oomphlap_verify_trigger_margin" in trial_row
         assert "oomphlap_verify_trigger_channel_failure" in trial_row
+        assert "oomphlap_retry_strategy" in trial_row
+        assert "oomphlap_retry_candidate_count" in trial_row
+        assert "oomphlap_retry_targeted_success_rate" in trial_row
         assert "oomphlap_retry_attempted" in trial_row
         assert "oomphlap_retry_succeeded" in trial_row
         assert "oomphlap_retry_draw_minus_success_rate" in trial_row
         assert summary["avg_hologram_diff_count"] >= summary["avg_hologram_missing_count"]
         assert 0.0 <= summary["focus_source_missing_rate"] <= 1.0
         assert 0.0 <= summary["oomphlap_retry_success_rate_given_attempt"] <= 1.0
+        assert 0.0 <= summary["avg_oomphlap_retry_targeted_success_rate"] <= 0.995
