@@ -436,9 +436,16 @@ class TestRunMatrixClaimRigor:
         assert "avg_correction_residual_coverage_fraction" in summary
         assert "avg_correction_residual_capture_rate" in summary
         assert "avg_correction_residual_fraction" in summary
+        assert "cascade_stabilization_usage_rate" in summary
+        assert "avg_correction_cascade_candidate_count" in summary
+        assert "avg_correction_cascade_selected_count" in summary
+        assert "avg_correction_cascade_coverage_fraction" in summary
+        assert "avg_correction_cascade_capture_rate" in summary
+        assert "avg_correction_cascade_fraction" in summary
         assert "avg_total_recovery_delta" in summary
         assert "avg_spillover_recovery_delta" in summary
         assert "avg_residual_recovery_delta" in summary
+        assert "avg_cascade_recovery_delta" in summary
         assert "avg_oomphlap_initial_bit_error_count" in summary
         assert "avg_oomphlap_final_bit_error_count" in summary
         assert "avg_oomphlap_min_threshold_distance" in summary
@@ -506,9 +513,16 @@ class TestRunMatrixClaimRigor:
         assert "correction_residual_coverage_fraction" in trial_row
         assert "correction_residual_capture_rate" in trial_row
         assert "correction_residual_fraction" in trial_row
+        assert "correction_cascade_stabilization_applied" in trial_row
+        assert "correction_cascade_candidate_count" in trial_row
+        assert "correction_cascade_selected_count" in trial_row
+        assert "correction_cascade_coverage_fraction" in trial_row
+        assert "correction_cascade_capture_rate" in trial_row
+        assert "correction_cascade_fraction" in trial_row
         assert "correction_rewrite_recovery_delta" in trial_row
         assert "correction_spillover_recovery_delta" in trial_row
         assert "correction_residual_recovery_delta" in trial_row
+        assert "correction_cascade_recovery_delta" in trial_row
         assert "correction_total_recovery_delta" in trial_row
         assert "correction_best_stage" in trial_row
         assert "oomphlap_channel_failure" in trial_row
@@ -572,6 +586,8 @@ class TestRunMatrixClaimRigor:
         assert "stress_correlated_noise_usage_rate" in summary
         assert "stress_cascading_fault_usage_rate" in summary
         assert "stress_partial_correction_override_rate" in summary
+        assert "stress_cascade_stabilization_usage_rate" in summary
+        assert "stress_avg_cascade_recovery_delta" in summary
         assert "stress_oomphlap_threshold_drift_success_rate" in summary
         assert "stress_oomphlap_correlated_channel_noise_success_rate" in summary
         assert "stress_oomphlap_single_channel_failure_success_rate" in summary
@@ -579,3 +595,5 @@ class TestRunMatrixClaimRigor:
         assert "stress_partial_correction_failure_success_rate" in summary
         assert stress_rows
         assert all(row["stress_case"] != "none" for row in stress_rows)
+        assert "correction_cascade_stabilization_applied" in stress_rows[0]
+        assert "correction_cascade_recovery_delta" in stress_rows[0]

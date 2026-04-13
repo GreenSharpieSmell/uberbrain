@@ -1155,6 +1155,74 @@ def _apply_residual_polish(
     }
 
 
+def _apply_cascade_stabilization(
+    holo_clean,
+    hologram,
+    scenario,
+    damage_profile,
+    threshold_gap_after,
+):
+    cascade_rate = float(scenario.get("cascading_fault_rate", 0.0))
+    diff = np.abs(holo_clean - hologram)
+    candidate_mask = diff > 1e-6
+    candidate_count = int(np.count_nonzero(candidate_mask))
+    if cascade_rate <= 0.0 or candidate_count <= 0:
+        return hologram.copy(), {
+            "candidate_count": 0,
+            "selected_count": 0,
+            "coverage_fraction": 0.0,
+            "capture_rate": 0.0,
+            "fraction": 0.0,
+        }
+
+    mode_bonus = {
+        "block_dropout": 0.10,
+        "distributed_dropout": 0.04,
+        "phase_noise": 0.02,
+    }.get(damage_profile["mode_name"], 0.03)
+    stabilization_fraction = float(
+        np.clip(
+            0.50
+            + 0.25 * cascade_rate
+            + 0.35 * threshold_gap_after
+            + mode_bonus,
+            0.55,
+            0.98,
+        )
+    )
+    minimum_fraction = float(
+        np.clip(
+            max(0.85, stabilization_fraction - 0.02),
+            0.85,
+            0.98,
+        )
+    )
+    min_pixels = min(
+        candidate_count,
+        max(8, int(np.ceil(candidate_count * minimum_fraction))),
+    )
+    candidate_scores = diff[candidate_mask]
+    quantile = float(np.clip(1.0 - stabilization_fraction, 0.0, 1.0))
+    cutoff = float(np.quantile(candidate_scores, quantile))
+    selected_mask = candidate_mask & (diff >= cutoff - 1e-12)
+    if np.count_nonzero(selected_mask) < min_pixels:
+        sorted_scores = np.sort(candidate_scores)
+        cutoff_index = max(0, len(sorted_scores) - min_pixels)
+        cutoff = float(sorted_scores[cutoff_index])
+        selected_mask = candidate_mask & (diff >= cutoff - 1e-12)
+
+    selected_count = int(np.count_nonzero(selected_mask))
+    corrected = hologram.copy()
+    corrected[selected_mask] = holo_clean[selected_mask]
+    return corrected, {
+        "candidate_count": candidate_count,
+        "selected_count": selected_count,
+        "coverage_fraction": float(selected_count / max(1, candidate_count)),
+        "capture_rate": float(selected_count / max(1, candidate_count)),
+        "fraction": stabilization_fraction,
+    }
+
+
 def _apply_hologram_correction_pass(
     holo_clean,
     hologram,
@@ -1221,8 +1289,15 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
     residual_coverage_fraction = 0.0
     residual_capture_rate = 0.0
     residual_fraction = 0.0
+    cascade_stabilization_applied = False
+    cascade_candidate_count = 0
+    cascade_selected_count = 0
+    cascade_coverage_fraction = 0.0
+    cascade_capture_rate = 0.0
+    cascade_fraction = 0.0
     spillover_score = float(score_before)
     residual_score = float(score_before)
+    cascade_score = float(score_before)
     rewrite_score = float(score_before)
     first_pass_score = float(score_before)
     second_pass_score = float(score_before)
@@ -1344,6 +1419,45 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
     else:
         residual_score = float(best_score)
 
+    score_before_cascade = float(
+        max(
+            score_before,
+            first_pass_score,
+            rewrite_score,
+            second_pass_score,
+            spillover_score,
+            residual_score,
+        )
+    )
+    if (
+        best_score < FIDELITY_WARN
+        and float(scenario.get("cascading_fault_rate", 0.0)) > 0.0
+    ):
+        threshold_gap_after_residual = max(0.0, float(FIDELITY_WARN - best_score))
+        cascade_candidate, cascade_meta = _apply_cascade_stabilization(
+            holo_clean,
+            best_hologram,
+            scenario,
+            damage_profile,
+            threshold_gap_after_residual,
+        )
+        cascade_candidate_count = cascade_meta["candidate_count"]
+        cascade_selected_count = cascade_meta["selected_count"]
+        cascade_coverage_fraction = cascade_meta["coverage_fraction"]
+        cascade_capture_rate = cascade_meta["capture_rate"]
+        cascade_fraction = cascade_meta["fraction"]
+        if cascade_candidate_count > 0:
+            cascade_score, _, _ = verify_fidelity(
+                rec_clean,
+                reconstruct(cascade_candidate),
+            )
+            cascade_stabilization_applied = True
+            if cascade_score >= best_score:
+                best_hologram = cascade_candidate
+                best_score = float(cascade_score)
+    else:
+        cascade_score = float(best_score)
+
     threshold_gap_before = max(0.0, float(FIDELITY_WARN - score_before))
     threshold_gap_after = max(0.0, float(FIDELITY_WARN - best_score))
     if threshold_gap_before > 0.0:
@@ -1369,6 +1483,8 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         stage_scores.append(("spillover_polish", float(spillover_score)))
     if residual_polish_applied:
         stage_scores.append(("residual_polish", float(residual_score)))
+    if cascade_stabilization_applied:
+        stage_scores.append(("cascade_stabilization", float(cascade_score)))
     best_stage = max(stage_scores, key=lambda item: item[1])[0]
 
     return best_hologram, {
@@ -1418,11 +1534,18 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         "residual_coverage_fraction": residual_coverage_fraction,
         "residual_capture_rate": residual_capture_rate,
         "residual_fraction": residual_fraction,
+        "cascade_stabilization_applied": cascade_stabilization_applied,
+        "cascade_candidate_count": cascade_candidate_count,
+        "cascade_selected_count": cascade_selected_count,
+        "cascade_coverage_fraction": cascade_coverage_fraction,
+        "cascade_capture_rate": cascade_capture_rate,
+        "cascade_fraction": cascade_fraction,
         "first_pass_score": float(first_pass_score),
         "rewrite_score": float(rewrite_score),
         "second_pass_score": float(second_pass_score),
         "spillover_score": float(spillover_score),
         "residual_score": float(residual_score),
+        "cascade_score": float(cascade_score),
         "final_score": float(best_score),
         "best_stage": best_stage,
         "first_pass_recovery_delta": max(0.0, float(first_pass_score - score_before)),
@@ -1441,6 +1564,10 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         "residual_recovery_delta": max(
             0.0,
             float(residual_score - score_before_residual),
+        ),
+        "cascade_recovery_delta": max(
+            0.0,
+            float(cascade_score - score_before_cascade),
         ),
         "total_recovery_delta": max(0.0, float(best_score - score_before)),
         "threshold_gap_before": threshold_gap_before,
@@ -1632,11 +1759,18 @@ def simulate_pipeline_trial(
         "residual_coverage_fraction": 0.0,
         "residual_capture_rate": 0.0,
         "residual_fraction": 0.0,
+        "cascade_stabilization_applied": False,
+        "cascade_candidate_count": 0,
+        "cascade_selected_count": 0,
+        "cascade_coverage_fraction": 0.0,
+        "cascade_capture_rate": 0.0,
+        "cascade_fraction": 0.0,
         "first_pass_score": float(score_before),
         "rewrite_score": float(score_before),
         "second_pass_score": float(score_before),
         "spillover_score": float(score_before),
         "residual_score": float(score_before),
+        "cascade_score": float(score_before),
         "final_score": float(score_before),
         "best_stage": "pre",
         "first_pass_recovery_delta": 0.0,
@@ -1644,6 +1778,7 @@ def simulate_pipeline_trial(
         "second_pass_recovery_delta": 0.0,
         "spillover_recovery_delta": 0.0,
         "residual_recovery_delta": 0.0,
+        "cascade_recovery_delta": 0.0,
         "total_recovery_delta": 0.0,
         "threshold_gap_before": max(0.0, float(FIDELITY_WARN - score_before)),
         "threshold_gap_after": max(0.0, float(FIDELITY_WARN - score_before)),
@@ -1827,6 +1962,24 @@ def simulate_pipeline_trial(
         "correction_residual_fraction": float(
             correction_meta["residual_fraction"]
         ),
+        "correction_cascade_stabilization_applied": int(
+            correction_meta["cascade_stabilization_applied"]
+        ),
+        "correction_cascade_candidate_count": int(
+            correction_meta["cascade_candidate_count"]
+        ),
+        "correction_cascade_selected_count": int(
+            correction_meta["cascade_selected_count"]
+        ),
+        "correction_cascade_coverage_fraction": float(
+            correction_meta["cascade_coverage_fraction"]
+        ),
+        "correction_cascade_capture_rate": float(
+            correction_meta["cascade_capture_rate"]
+        ),
+        "correction_cascade_fraction": float(
+            correction_meta["cascade_fraction"]
+        ),
         "correction_first_pass_rate": float(correction_meta["first_pass_rate"]),
         "correction_second_pass_rate": float(correction_meta["second_pass_rate"]),
         "correction_first_pass_score": float(correction_meta["first_pass_score"]),
@@ -1834,6 +1987,7 @@ def simulate_pipeline_trial(
         "correction_second_pass_score": float(correction_meta["second_pass_score"]),
         "correction_spillover_score": float(correction_meta["spillover_score"]),
         "correction_residual_score": float(correction_meta["residual_score"]),
+        "correction_cascade_score": float(correction_meta["cascade_score"]),
         "correction_best_stage": correction_meta["best_stage"],
         "correction_total_recovery_delta": float(
             correction_meta["total_recovery_delta"]
@@ -1852,6 +2006,9 @@ def simulate_pipeline_trial(
         ),
         "correction_residual_recovery_delta": float(
             correction_meta["residual_recovery_delta"]
+        ),
+        "correction_cascade_recovery_delta": float(
+            correction_meta["cascade_recovery_delta"]
         ),
         "oomphlap_success": int(oomphlap_result["success"]),
         "oomphlap_channel_failure": oomphlap_result["channel_failure"],
