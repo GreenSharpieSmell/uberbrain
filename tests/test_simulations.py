@@ -135,14 +135,22 @@ def test_sim4_trial_reports_failure_fields():
     assert "hologram_damage_fraction" in result
     assert "hologram_missing_fraction" in result
     assert "hologram_severity_score" in result
+    assert "hologram_geometry_score" in result
+    assert "hologram_damage_cluster_count" in result
+    assert "hologram_largest_cluster_share" in result
     assert "correction_attempts_used" in result
+    assert "correction_focus_strength" in result
     assert "correction_total_recovery_delta" in result
     assert result["failure_reason"]
     assert result["failure_detail"]
     assert result["hologram_damage_fraction"] >= 0.0
     assert result["hologram_missing_fraction"] >= 0.0
     assert result["hologram_severity_score"] >= 0.0
+    assert result["hologram_geometry_score"] >= 0.0
+    assert result["hologram_damage_cluster_count"] >= 0
+    assert 0.0 <= result["hologram_largest_cluster_share"] <= 1.0
     assert result["correction_attempts_used"] <= result["correction_attempts_planned"]
+    assert result["correction_focus_strength"] >= 0.0
     assert result["correction_total_recovery_delta"] >= 0.0
 
 
@@ -166,6 +174,32 @@ def test_sim4_correction_path_never_lowers_best_hologram_score():
     assert result["ssim_after"] >= result["ssim_before"] - 1e-9
     assert result["correction_total_recovery_delta"] >= 0.0
     assert result["correction_second_pass_recovery_delta"] >= 0.0
+
+
+def test_sim4_block_dropout_geometry_is_more_clustered_than_distributed_dropout():
+    block_scenario = sim4.sample_pipeline_scenario(42)
+    block_scenario.update({
+        "hologram_mode": "block_dropout",
+        "corrupt_size": 40,
+        "corrupt_x": 24,
+        "corrupt_y": 24,
+    })
+    distributed_scenario = sim4.sample_pipeline_scenario(42)
+    distributed_scenario.update({
+        "hologram_mode": "distributed_dropout",
+        "corrupt_size": 40,
+        "distributed_stride": 12,
+    })
+
+    block = sim4.simulate_pipeline_trial(block_scenario)
+    distributed = sim4.simulate_pipeline_trial(distributed_scenario)
+
+    assert (
+        block["hologram_largest_cluster_bbox_fraction"]
+        >= distributed["hologram_largest_cluster_bbox_fraction"]
+    )
+    assert block["hologram_geometry_score"] >= distributed["hologram_geometry_score"]
+    assert block["correction_focus_strength"] >= distributed["correction_focus_strength"]
 
 
 def test_sim4_no_consolidate_worsens_graph_health_under_stress():

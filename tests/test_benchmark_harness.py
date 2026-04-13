@@ -403,11 +403,16 @@ class TestRunMatrixClaimRigor:
         assert "uplift_vs_modeled_ablations" in summary
         assert "pipeline_failure_rate" in summary
         assert "avg_hologram_severity_score" in summary
+        assert "avg_hologram_geometry_score" in summary
+        assert "avg_hologram_largest_cluster_share" in summary
         assert "avg_total_recovery_delta" in summary
         assert "block_dropout_success_rate" in summary
         assert "failure_count_multi_stage" in summary
         assert "uplift_vs_no_consolidate_bleach" in summary
         assert "failure_detail_full" in trial_row
         assert "hologram_severity_score" in trial_row
+        assert "hologram_geometry_score" in trial_row
+        assert "hologram_largest_cluster_share" in trial_row
         assert "correction_attempts_used" in trial_row
+        assert "correction_focus_strength" in trial_row
         assert "correction_total_recovery_delta" in trial_row

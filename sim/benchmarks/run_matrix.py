@@ -413,6 +413,12 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     damage_fractions = []
     missing_fractions = []
     severity_scores = []
+    geometry_scores = []
+    cluster_counts = []
+    largest_cluster_shares = []
+    largest_cluster_bbox_fractions = []
+    largest_cluster_fill_ratios = []
+    focus_strengths = []
     correction_attempts = []
     second_pass_flags = []
     first_pass_recovery_deltas = []
@@ -458,6 +464,16 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         damage_fractions.append(float(full["hologram_damage_fraction"]))
         missing_fractions.append(float(full["hologram_missing_fraction"]))
         severity_scores.append(float(full["hologram_severity_score"]))
+        geometry_scores.append(float(full["hologram_geometry_score"]))
+        cluster_counts.append(float(full["hologram_damage_cluster_count"]))
+        largest_cluster_shares.append(float(full["hologram_largest_cluster_share"]))
+        largest_cluster_bbox_fractions.append(
+            float(full["hologram_largest_cluster_bbox_fraction"])
+        )
+        largest_cluster_fill_ratios.append(
+            float(full["hologram_largest_cluster_fill_ratio"])
+        )
+        focus_strengths.append(float(full["correction_focus_strength"]))
         correction_attempts.append(float(full["correction_attempts_used"]))
         second_pass_flags.append(float(full["correction_used_second_pass"]))
         first_pass_recovery_deltas.append(
@@ -507,8 +523,29 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["hologram_severity_score"]),
                 6,
             ),
+            "hologram_geometry_score": round(
+                float(full["hologram_geometry_score"]),
+                6,
+            ),
+            "hologram_damage_cluster_count": int(full["hologram_damage_cluster_count"]),
+            "hologram_largest_cluster_share": round(
+                float(full["hologram_largest_cluster_share"]),
+                6,
+            ),
+            "hologram_largest_cluster_bbox_fraction": round(
+                float(full["hologram_largest_cluster_bbox_fraction"]),
+                6,
+            ),
+            "hologram_largest_cluster_fill_ratio": round(
+                float(full["hologram_largest_cluster_fill_ratio"]),
+                6,
+            ),
             "correction_attempts_used": int(full["correction_attempts_used"]),
             "correction_used_second_pass": int(full["correction_used_second_pass"]),
+            "correction_focus_strength": round(
+                float(full["correction_focus_strength"]),
+                6,
+            ),
             "correction_first_pass_recovery_delta": round(
                 float(full["correction_first_pass_recovery_delta"]),
                 6,
@@ -603,10 +640,25 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             6,
         ),
         "avg_hologram_severity_score": round(bench_metrics.mean(severity_scores), 6),
+        "avg_hologram_geometry_score": round(bench_metrics.mean(geometry_scores), 6),
+        "avg_hologram_damage_cluster_count": round(bench_metrics.mean(cluster_counts), 6),
+        "avg_hologram_largest_cluster_share": round(
+            bench_metrics.mean(largest_cluster_shares),
+            6,
+        ),
+        "avg_hologram_largest_cluster_bbox_fraction": round(
+            bench_metrics.mean(largest_cluster_bbox_fractions),
+            6,
+        ),
+        "avg_hologram_largest_cluster_fill_ratio": round(
+            bench_metrics.mean(largest_cluster_fill_ratios),
+            6,
+        ),
         "avg_correction_attempts_used": round(
             bench_metrics.mean(correction_attempts),
             6,
         ),
+        "avg_correction_focus_strength": round(bench_metrics.mean(focus_strengths), 6),
         "second_pass_usage_rate": round(bench_metrics.mean(second_pass_flags), 6),
         "avg_first_pass_recovery_delta": round(
             bench_metrics.mean(first_pass_recovery_deltas),

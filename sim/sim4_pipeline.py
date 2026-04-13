@@ -52,6 +52,7 @@ import random
 import warnings
 warnings.filterwarnings('ignore')
 
+from scipy import ndimage
 from skimage.metrics import structural_similarity as ssim
 from itertools import product as iterproduct
 
@@ -366,14 +367,66 @@ def _apply_hologram_perturbation(holo_clean, scenario):
     return np.clip(normalize_field(perturbed), 0.0, 1.0)
 
 
+def _measure_damage_geometry(mask):
+    geometry = {
+        "cluster_count": 0,
+        "largest_cluster_share": 0.0,
+        "largest_cluster_bbox_fraction": 0.0,
+        "largest_cluster_fill_ratio": 0.0,
+        "geometry_score": 0.0,
+        "focus_mask": np.zeros_like(mask, dtype=bool),
+        "focus_depth_normalized": np.zeros_like(mask, dtype=float),
+    }
+    if not np.any(mask):
+        return geometry
+
+    structure = np.ones((3, 3), dtype=int)
+    labels, cluster_count = ndimage.label(mask.astype(int), structure=structure)
+    counts = np.bincount(labels.ravel())[1:]
+    if counts.size == 0:
+        return geometry
+
+    largest_label = int(np.argmax(counts)) + 1
+    largest_cluster_size = int(counts[largest_label - 1])
+    focus_mask = labels == largest_label
+    ys, xs = np.where(focus_mask)
+    y0, y1 = int(ys.min()), int(ys.max())
+    x0, x1 = int(xs.min()), int(xs.max())
+    bbox_area = int((y1 - y0 + 1) * (x1 - x0 + 1))
+    total_damaged = int(np.count_nonzero(mask))
+    focus_depth = ndimage.distance_transform_edt(focus_mask)
+    max_depth = float(focus_depth.max())
+    if max_depth > 0:
+        focus_depth_normalized = focus_depth / max_depth
+    else:
+        focus_depth_normalized = np.zeros_like(focus_depth, dtype=float)
+
+    largest_cluster_share = float(largest_cluster_size / max(1, total_damaged))
+    largest_cluster_bbox_fraction = float(bbox_area / mask.size)
+    largest_cluster_fill_ratio = float(largest_cluster_size / max(1, bbox_area))
+    geometry_score = min(
+        1.0,
+        0.75 * largest_cluster_share + 0.25 * largest_cluster_fill_ratio,
+    )
+    return {
+        "cluster_count": int(cluster_count),
+        "largest_cluster_share": largest_cluster_share,
+        "largest_cluster_bbox_fraction": largest_cluster_bbox_fraction,
+        "largest_cluster_fill_ratio": largest_cluster_fill_ratio,
+        "geometry_score": geometry_score,
+        "focus_mask": focus_mask,
+        "focus_depth_normalized": focus_depth_normalized,
+    }
+
+
 def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
     diff = np.abs(holo_clean - holo_corrupt)
     diff_mask = diff > 1e-6
     damage_fraction = float(np.mean(diff_mask))
     mean_abs_delta = float(diff[diff_mask].mean()) if np.any(diff_mask) else 0.0
-    missing_fraction = float(
-        np.mean(diff_mask & (holo_corrupt < 0.02) & (holo_clean > 0.08))
-    )
+    missing_mask = diff_mask & (holo_corrupt < 0.02) & (holo_clean > 0.08)
+    missing_fraction = float(np.mean(missing_mask))
+    geometry = _measure_damage_geometry(missing_mask if np.any(missing_mask) else diff_mask)
 
     mode_profiles = {
         "block_dropout": {
@@ -381,24 +434,45 @@ def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
             "damage_weight": 0.30,
             "missing_weight": 3.10,
             "delta_weight": 0.85,
+            "geometry_weight": 0.20,
+            "bbox_weight": 0.10,
             "second_pass_bonus": 0.22,
             "noise_scale": 1.15,
+            "region_focus_weight": 0.95,
+            "first_pass_focus_bonus": 0.75,
+            "second_pass_focus_bonus": 1.10,
+            "first_pass_interior_bias": 0.20,
+            "second_pass_interior_bias": 0.80,
         },
         "distributed_dropout": {
             "mode_multiplier": 0.90,
             "damage_weight": 0.16,
             "missing_weight": 1.70,
             "delta_weight": 0.60,
+            "geometry_weight": 0.08,
+            "bbox_weight": 0.04,
             "second_pass_bonus": 0.18,
             "noise_scale": 0.90,
+            "region_focus_weight": 0.45,
+            "first_pass_focus_bonus": 0.25,
+            "second_pass_focus_bonus": 0.40,
+            "first_pass_interior_bias": 0.05,
+            "second_pass_interior_bias": 0.20,
         },
         "phase_noise": {
             "mode_multiplier": 1.08,
             "damage_weight": 0.05,
             "missing_weight": 0.40,
             "delta_weight": 0.35,
+            "geometry_weight": 0.03,
+            "bbox_weight": 0.01,
             "second_pass_bonus": 0.08,
             "noise_scale": 0.55,
+            "region_focus_weight": 0.10,
+            "first_pass_focus_bonus": 0.10,
+            "second_pass_focus_bonus": 0.12,
+            "first_pass_interior_bias": 0.02,
+            "second_pass_interior_bias": 0.08,
         },
     }
     profile = mode_profiles[scenario["hologram_mode"]]
@@ -406,7 +480,9 @@ def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
         1.0,
         damage_fraction * profile["damage_weight"]
         + missing_fraction * profile["missing_weight"]
-        + mean_abs_delta * profile["delta_weight"],
+        + mean_abs_delta * profile["delta_weight"]
+        + geometry["geometry_score"] * profile["geometry_weight"]
+        + geometry["largest_cluster_bbox_fraction"] * profile["bbox_weight"],
     )
 
     return {
@@ -414,6 +490,7 @@ def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
         "mean_abs_delta": mean_abs_delta,
         "missing_fraction": missing_fraction,
         "severity_score": severity_score,
+        **geometry,
         **profile,
     }
 
@@ -437,24 +514,101 @@ def _derive_correction_rates(scenario, damage_profile):
         * (1.0 + damage_profile["noise_scale"] * damage_profile["severity_score"])
     )
     second_pass_noise = first_pass_noise * 0.60
+    focus_strength = float(
+        np.clip(
+            damage_profile["geometry_score"] * damage_profile["region_focus_weight"],
+            0.0,
+            1.0,
+        )
+    )
     return {
         "first_pass_rate": first_pass_rate,
         "second_pass_rate": second_pass_rate,
         "first_pass_noise": first_pass_noise,
         "second_pass_noise": second_pass_noise,
+        "focus_strength": focus_strength,
+        "first_pass_focus_bonus": float(
+            damage_profile["first_pass_focus_bonus"] * focus_strength
+        ),
+        "second_pass_focus_bonus": float(
+            damage_profile["second_pass_focus_bonus"] * focus_strength
+        ),
+        "first_pass_interior_bias": float(
+            damage_profile["first_pass_interior_bias"] * focus_strength
+        ),
+        "second_pass_interior_bias": float(
+            damage_profile["second_pass_interior_bias"] * focus_strength
+        ),
     }
 
 
-def _apply_hologram_correction_pass(holo_clean, hologram, repair_rate, residual_sigma, seed):
+def _build_region_repair_probability_map(
+    diff_mask,
+    damage_profile,
+    repair_rate,
+    pass_index,
+    focus_bonus,
+    interior_bias,
+):
+    probability_map = np.zeros(diff_mask.shape, dtype=float)
+    probability_map[diff_mask] = repair_rate
+
+    focus_mask = diff_mask & damage_profile["focus_mask"]
+    if not np.any(focus_mask):
+        return np.clip(probability_map, 0.0, 0.98)
+
+    normalized_depth = damage_profile["focus_depth_normalized"]
+    if pass_index == 1:
+        focus_multiplier = 1.0 + focus_bonus * (0.35 + 0.85 * (1.0 - normalized_depth))
+    else:
+        focus_multiplier = (
+            1.0
+            + focus_bonus * (0.35 + 0.80 * normalized_depth)
+            + interior_bias * normalized_depth
+        )
+    probability_map[focus_mask] = (
+        probability_map[focus_mask] * focus_multiplier[focus_mask]
+    )
+
+    non_focus_mask = diff_mask & ~focus_mask
+    if np.any(non_focus_mask):
+        spillover_multiplier = 1.0 + 0.20 * focus_bonus
+        probability_map[non_focus_mask] = (
+            probability_map[non_focus_mask] * spillover_multiplier
+        )
+
+    return np.clip(probability_map, 0.0, 0.98)
+
+
+def _apply_hologram_correction_pass(
+    holo_clean,
+    hologram,
+    repair_rate,
+    residual_sigma,
+    damage_profile,
+    pass_index,
+    focus_bonus,
+    interior_bias,
+    seed,
+):
     rng = np.random.default_rng(seed)
     corrected = hologram.copy()
     diff_mask = np.abs(holo_clean - hologram) > 1e-6
-    repair_mask = diff_mask & (rng.random(holo_clean.shape) < repair_rate)
+    repair_probabilities = _build_region_repair_probability_map(
+        diff_mask,
+        damage_profile,
+        repair_rate,
+        pass_index,
+        focus_bonus,
+        interior_bias,
+    )
+    repair_mask = diff_mask & (rng.random(holo_clean.shape) < repair_probabilities)
     corrected[repair_mask] = holo_clean[repair_mask]
 
-    if residual_sigma > 0:
-        corrected = np.clip(
-            corrected + rng.normal(0.0, residual_sigma, corrected.shape),
+    if residual_sigma > 0 and np.any(repair_mask):
+        noise = rng.normal(0.0, residual_sigma, corrected.shape)
+        corrected[repair_mask] = np.clip(
+            corrected[repair_mask] + noise[repair_mask],
             0.0,
             1.0,
         )
@@ -478,6 +632,10 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         best_hologram,
         rates["first_pass_rate"],
         rates["first_pass_noise"],
+        damage_profile,
+        1,
+        rates["first_pass_focus_bonus"],
+        rates["first_pass_interior_bias"],
         scenario["seed"] + 4001,
     )
     attempts_used = 1
@@ -492,6 +650,10 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
             best_hologram,
             rates["second_pass_rate"],
             rates["second_pass_noise"],
+            damage_profile,
+            2,
+            rates["second_pass_focus_bonus"],
+            rates["second_pass_interior_bias"],
             scenario["seed"] + 4002,
         )
         attempts_used = 2
@@ -513,6 +675,12 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         "missing_fraction": damage_profile["missing_fraction"],
         "mean_abs_delta": damage_profile["mean_abs_delta"],
         "severity_score": damage_profile["severity_score"],
+        "cluster_count": damage_profile["cluster_count"],
+        "largest_cluster_share": damage_profile["largest_cluster_share"],
+        "largest_cluster_bbox_fraction": damage_profile["largest_cluster_bbox_fraction"],
+        "largest_cluster_fill_ratio": damage_profile["largest_cluster_fill_ratio"],
+        "geometry_score": damage_profile["geometry_score"],
+        "focus_strength": rates["focus_strength"],
         "first_pass_score": float(first_pass_score),
         "second_pass_score": float(second_pass_score),
         "final_score": float(best_score),
@@ -668,6 +836,12 @@ def simulate_pipeline_trial(
         "missing_fraction": damage_profile["missing_fraction"],
         "mean_abs_delta": damage_profile["mean_abs_delta"],
         "severity_score": damage_profile["severity_score"],
+        "cluster_count": damage_profile["cluster_count"],
+        "largest_cluster_share": damage_profile["largest_cluster_share"],
+        "largest_cluster_bbox_fraction": damage_profile["largest_cluster_bbox_fraction"],
+        "largest_cluster_fill_ratio": damage_profile["largest_cluster_fill_ratio"],
+        "geometry_score": damage_profile["geometry_score"],
+        "focus_strength": correction_rates["focus_strength"],
         "first_pass_score": float(score_before),
         "second_pass_score": float(score_before),
         "final_score": float(score_before),
@@ -740,9 +914,21 @@ def simulate_pipeline_trial(
         "hologram_missing_fraction": float(correction_meta["missing_fraction"]),
         "hologram_mean_abs_delta": float(correction_meta["mean_abs_delta"]),
         "hologram_severity_score": float(correction_meta["severity_score"]),
+        "hologram_geometry_score": float(correction_meta["geometry_score"]),
+        "hologram_damage_cluster_count": int(correction_meta["cluster_count"]),
+        "hologram_largest_cluster_share": float(
+            correction_meta["largest_cluster_share"]
+        ),
+        "hologram_largest_cluster_bbox_fraction": float(
+            correction_meta["largest_cluster_bbox_fraction"]
+        ),
+        "hologram_largest_cluster_fill_ratio": float(
+            correction_meta["largest_cluster_fill_ratio"]
+        ),
         "correction_attempts_planned": int(correction_meta["attempts_planned"]),
         "correction_attempts_used": int(correction_meta["attempts_used"]),
         "correction_used_second_pass": int(correction_meta["used_second_pass"]),
+        "correction_focus_strength": float(correction_meta["focus_strength"]),
         "correction_first_pass_rate": float(correction_meta["first_pass_rate"]),
         "correction_second_pass_rate": float(correction_meta["second_pass_rate"]),
         "correction_first_pass_score": float(correction_meta["first_pass_score"]),
