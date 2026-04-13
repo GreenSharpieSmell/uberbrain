@@ -881,6 +881,62 @@ def _apply_contiguous_region_rewrite(
     }
 
 
+def _apply_spillover_polish(
+    holo_clean,
+    hologram,
+    damage_profile,
+    threshold_gap_after,
+):
+    diff = np.abs(holo_clean - hologram)
+    non_focus_candidates = (diff > 1e-6) & ~damage_profile["focus_mask"]
+    candidate_count = int(np.count_nonzero(non_focus_candidates))
+    if candidate_count <= 0:
+        return hologram.copy(), {
+            "candidate_count": 0,
+            "selected_count": 0,
+            "coverage_fraction": 0.0,
+            "capture_rate": 0.0,
+            "fraction": 0.0,
+        }
+
+    focus_strength = float(
+        np.clip(
+            damage_profile["geometry_score"] * damage_profile["region_focus_weight"],
+            0.0,
+            1.0,
+        )
+    )
+    polish_fraction = float(
+        np.clip(
+            0.20 + 0.30 * threshold_gap_after + 0.15 * (1.0 - focus_strength),
+            0.20,
+            0.75,
+        )
+    )
+    min_pixels = min(candidate_count, 24)
+    candidate_scores = diff[non_focus_candidates]
+    quantile = float(np.clip(1.0 - polish_fraction, 0.0, 1.0))
+    cutoff = float(np.quantile(candidate_scores, quantile))
+    selected_mask = non_focus_candidates & (diff >= cutoff - 1e-12)
+    if np.count_nonzero(selected_mask) < min_pixels:
+        sorted_scores = np.sort(candidate_scores)
+        cutoff_index = max(0, len(sorted_scores) - min_pixels)
+        cutoff = float(sorted_scores[cutoff_index])
+        selected_mask = non_focus_candidates & (diff >= cutoff - 1e-12)
+
+    selected_count = int(np.count_nonzero(selected_mask))
+    corrected = hologram.copy()
+    corrected[selected_mask] = holo_clean[selected_mask]
+    total_damaged = max(1, int(np.count_nonzero(diff > 1e-6)))
+    return corrected, {
+        "candidate_count": candidate_count,
+        "selected_count": selected_count,
+        "coverage_fraction": float(selected_count / total_damaged),
+        "capture_rate": float(selected_count / max(1, candidate_count)),
+        "fraction": polish_fraction,
+    }
+
+
 def _apply_hologram_correction_pass(
     holo_clean,
     hologram,
@@ -935,6 +991,13 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
     interior_candidate_count = 0
     interior_rewrite_capture_rate = 0.0
     interior_selected_count = 0
+    spillover_polish_applied = False
+    spillover_candidate_count = 0
+    spillover_selected_count = 0
+    spillover_coverage_fraction = 0.0
+    spillover_capture_rate = 0.0
+    spillover_fraction = 0.0
+    spillover_score = float(score_before)
     rewrite_score = float(score_before)
     first_pass_score = float(score_before)
     second_pass_score = float(score_before)
@@ -1000,6 +1063,34 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
     else:
         second_pass_score = float(best_score)
 
+    score_before_spillover = float(
+        max(score_before, first_pass_score, rewrite_score, second_pass_score)
+    )
+    if best_score < FIDELITY_WARN:
+        threshold_gap_after_second_pass = max(0.0, float(FIDELITY_WARN - best_score))
+        spillover_candidate, spillover_meta = _apply_spillover_polish(
+            holo_clean,
+            best_hologram,
+            damage_profile,
+            threshold_gap_after_second_pass,
+        )
+        spillover_candidate_count = spillover_meta["candidate_count"]
+        spillover_selected_count = spillover_meta["selected_count"]
+        spillover_coverage_fraction = spillover_meta["coverage_fraction"]
+        spillover_capture_rate = spillover_meta["capture_rate"]
+        spillover_fraction = spillover_meta["fraction"]
+        if spillover_candidate_count > 0:
+            spillover_score, _, _ = verify_fidelity(
+                rec_clean,
+                reconstruct(spillover_candidate),
+            )
+            spillover_polish_applied = True
+            if spillover_score >= best_score:
+                best_hologram = spillover_candidate
+                best_score = float(spillover_score)
+    else:
+        spillover_score = float(best_score)
+
     threshold_gap_before = max(0.0, float(FIDELITY_WARN - score_before))
     threshold_gap_after = max(0.0, float(FIDELITY_WARN - best_score))
     if threshold_gap_before > 0.0:
@@ -1021,6 +1112,8 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         stage_scores.append(("rewrite", float(rewrite_score)))
     if used_second_pass:
         stage_scores.append(("second_pass", float(second_pass_score)))
+    if spillover_polish_applied:
+        stage_scores.append(("spillover_polish", float(spillover_score)))
     best_stage = max(stage_scores, key=lambda item: item[1])[0]
 
     return best_hologram, {
@@ -1058,9 +1151,16 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         "interior_candidate_count": interior_candidate_count,
         "interior_rewrite_capture_rate": interior_rewrite_capture_rate,
         "interior_selected_count": interior_selected_count,
+        "spillover_polish_applied": spillover_polish_applied,
+        "spillover_candidate_count": spillover_candidate_count,
+        "spillover_selected_count": spillover_selected_count,
+        "spillover_coverage_fraction": spillover_coverage_fraction,
+        "spillover_capture_rate": spillover_capture_rate,
+        "spillover_fraction": spillover_fraction,
         "first_pass_score": float(first_pass_score),
         "rewrite_score": float(rewrite_score),
         "second_pass_score": float(second_pass_score),
+        "spillover_score": float(spillover_score),
         "final_score": float(best_score),
         "best_stage": best_stage,
         "first_pass_recovery_delta": max(0.0, float(first_pass_score - score_before)),
@@ -1070,7 +1170,11 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         ),
         "second_pass_recovery_delta": max(
             0.0,
-            float(best_score - max(score_before, first_pass_score, rewrite_score)),
+            float(second_pass_score - max(score_before, first_pass_score, rewrite_score)),
+        ),
+        "spillover_recovery_delta": max(
+            0.0,
+            float(spillover_score - score_before_spillover),
         ),
         "total_recovery_delta": max(0.0, float(best_score - score_before)),
         "threshold_gap_before": threshold_gap_before,
@@ -1250,14 +1354,22 @@ def simulate_pipeline_trial(
         "interior_candidate_count": 0,
         "interior_rewrite_capture_rate": 0.0,
         "interior_selected_count": 0,
+        "spillover_polish_applied": False,
+        "spillover_candidate_count": 0,
+        "spillover_selected_count": 0,
+        "spillover_coverage_fraction": 0.0,
+        "spillover_capture_rate": 0.0,
+        "spillover_fraction": 0.0,
         "first_pass_score": float(score_before),
         "rewrite_score": float(score_before),
         "second_pass_score": float(score_before),
+        "spillover_score": float(score_before),
         "final_score": float(score_before),
         "best_stage": "pre",
         "first_pass_recovery_delta": 0.0,
         "rewrite_recovery_delta": 0.0,
         "second_pass_recovery_delta": 0.0,
+        "spillover_recovery_delta": 0.0,
         "total_recovery_delta": 0.0,
         "threshold_gap_before": max(0.0, float(FIDELITY_WARN - score_before)),
         "threshold_gap_after": max(0.0, float(FIDELITY_WARN - score_before)),
@@ -1403,11 +1515,30 @@ def simulate_pipeline_trial(
         "correction_interior_selected_count": int(
             correction_meta["interior_selected_count"]
         ),
+        "correction_spillover_polish_applied": int(
+            correction_meta["spillover_polish_applied"]
+        ),
+        "correction_spillover_candidate_count": int(
+            correction_meta["spillover_candidate_count"]
+        ),
+        "correction_spillover_selected_count": int(
+            correction_meta["spillover_selected_count"]
+        ),
+        "correction_spillover_coverage_fraction": float(
+            correction_meta["spillover_coverage_fraction"]
+        ),
+        "correction_spillover_capture_rate": float(
+            correction_meta["spillover_capture_rate"]
+        ),
+        "correction_spillover_fraction": float(
+            correction_meta["spillover_fraction"]
+        ),
         "correction_first_pass_rate": float(correction_meta["first_pass_rate"]),
         "correction_second_pass_rate": float(correction_meta["second_pass_rate"]),
         "correction_first_pass_score": float(correction_meta["first_pass_score"]),
         "correction_rewrite_score": float(correction_meta["rewrite_score"]),
         "correction_second_pass_score": float(correction_meta["second_pass_score"]),
+        "correction_spillover_score": float(correction_meta["spillover_score"]),
         "correction_best_stage": correction_meta["best_stage"],
         "correction_total_recovery_delta": float(
             correction_meta["total_recovery_delta"]
@@ -1420,6 +1551,9 @@ def simulate_pipeline_trial(
         ),
         "correction_second_pass_recovery_delta": float(
             correction_meta["second_pass_recovery_delta"]
+        ),
+        "correction_spillover_recovery_delta": float(
+            correction_meta["spillover_recovery_delta"]
         ),
         "oomphlap_success": int(oomphlap_result["success"]),
         "oomphlap_channel_failure": oomphlap_result["channel_failure"],

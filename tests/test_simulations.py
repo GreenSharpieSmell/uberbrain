@@ -162,7 +162,14 @@ def test_sim4_trial_reports_failure_fields():
     assert "correction_interior_candidate_count" in result
     assert "correction_interior_rewrite_capture_rate" in result
     assert "correction_interior_selected_count" in result
+    assert "correction_spillover_polish_applied" in result
+    assert "correction_spillover_candidate_count" in result
+    assert "correction_spillover_selected_count" in result
+    assert "correction_spillover_coverage_fraction" in result
+    assert "correction_spillover_capture_rate" in result
+    assert "correction_spillover_fraction" in result
     assert "correction_rewrite_recovery_delta" in result
+    assert "correction_spillover_recovery_delta" in result
     assert "correction_total_recovery_delta" in result
     assert "correction_best_stage" in result
     assert "oomphlap_channel_failure" in result
@@ -216,11 +223,24 @@ def test_sim4_trial_reports_failure_fields():
     assert result["correction_interior_candidate_count"] >= 0
     assert result["correction_interior_rewrite_capture_rate"] >= 0.0
     assert result["correction_interior_selected_count"] >= 0
+    assert result["correction_spillover_polish_applied"] in {0, 1}
+    assert result["correction_spillover_candidate_count"] >= 0
+    assert result["correction_spillover_selected_count"] >= 0
+    assert result["correction_spillover_coverage_fraction"] >= 0.0
+    assert result["correction_spillover_capture_rate"] >= 0.0
+    assert result["correction_spillover_fraction"] >= 0.0
     assert result["correction_boundary_selected_count"] <= result["correction_boundary_candidate_count"]
     assert result["correction_interior_selected_count"] <= result["correction_interior_candidate_count"]
     assert result["correction_rewrite_recovery_delta"] >= 0.0
+    assert result["correction_spillover_recovery_delta"] >= 0.0
     assert result["correction_total_recovery_delta"] >= 0.0
-    assert result["correction_best_stage"] in {"pre", "first_pass", "rewrite", "second_pass"}
+    assert result["correction_best_stage"] in {
+        "pre",
+        "first_pass",
+        "rewrite",
+        "second_pass",
+        "spillover_polish",
+    }
     assert result["oomphlap_channel_failure"] in {"none", "stuck_low", "stuck_high", "random"}
     assert result["oomphlap_failed_channel"] >= -1
     assert result["oomphlap_initial_bit_error_count"] >= 0
@@ -391,6 +411,24 @@ def test_sim4_oomphlap_retry_plan_targets_explicit_channel_failures():
     assert plan["strategy"] == "targeted_channel_rewrite"
     assert plan["candidate_indices"] == [0]
     assert plan["targeted_success_rate"] > scenario["oomphlap_retry_success_rate"]
+
+
+def test_sim4_spillover_polish_recovers_non_focus_residuals():
+    scenario = sim4.sample_pipeline_scenario(42)
+
+    result = sim4.simulate_pipeline_trial(
+        scenario,
+        enable_verify=True,
+        enable_correction_write=True,
+        enable_consolidate_bleach=True,
+    )
+
+    assert result["correction_spillover_polish_applied"] == 1
+    assert result["correction_best_stage"] == "spillover_polish"
+    assert result["correction_spillover_candidate_count"] > 0
+    assert result["correction_spillover_selected_count"] > 0
+    assert result["correction_spillover_capture_rate"] > 0.0
+    assert result["correction_spillover_recovery_delta"] > 0.0
 
 
 def test_sim4_block_dropout_geometry_is_more_clustered_than_distributed_dropout():
