@@ -435,6 +435,8 @@ class TestRunMatrixClaimRigor:
         assert "avg_oomphlap_initial_bit_error_count" in summary
         assert "avg_oomphlap_final_bit_error_count" in summary
         assert "avg_oomphlap_min_threshold_distance" in summary
+        assert "avg_oomphlap_retry_max_attempts" in summary
+        assert "avg_oomphlap_retry_attempts_used" in summary
         assert "avg_oomphlap_retry_targeted_success_rate" in summary
         assert "oomphlap_verify_rate" in summary
         assert "oomphlap_verify_margin_trigger_rate" in summary
@@ -499,9 +501,11 @@ class TestRunMatrixClaimRigor:
         assert "oomphlap_verify_trigger_margin" in trial_row
         assert "oomphlap_verify_trigger_channel_failure" in trial_row
         assert "oomphlap_retry_strategy" in trial_row
+        assert "oomphlap_retry_max_attempts" in trial_row
         assert "oomphlap_retry_candidate_count" in trial_row
         assert "oomphlap_retry_targeted_success_rate" in trial_row
         assert "oomphlap_retry_attempted" in trial_row
+        assert "oomphlap_retry_attempts_used" in trial_row
         assert "oomphlap_retry_succeeded" in trial_row
         assert "oomphlap_retry_draw_minus_success_rate" in trial_row
         assert summary["avg_hologram_diff_count"] >= summary["avg_hologram_missing_count"]

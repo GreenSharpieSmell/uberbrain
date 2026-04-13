@@ -463,6 +463,8 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     oomphlap_verify_channel_failure_flags = []
     oomphlap_retry_attempt_flags = []
     oomphlap_retry_success_flags = []
+    oomphlap_retry_max_attempts = []
+    oomphlap_retry_attempts_used = []
     oomphlap_retry_targeted_success_rates = []
     oomphlap_retry_strategy_targeted_flags = []
     oomphlap_retry_strategy_margin_flags = []
@@ -625,6 +627,8 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         )
         oomphlap_retry_attempt_flags.append(float(full["oomphlap_retry_attempted"]))
         oomphlap_retry_success_flags.append(float(full["oomphlap_retry_succeeded"]))
+        oomphlap_retry_max_attempts.append(float(full["oomphlap_retry_max_attempts"]))
+        oomphlap_retry_attempts_used.append(float(full["oomphlap_retry_attempts_used"]))
         oomphlap_retry_targeted_success_rates.append(
             float(full["oomphlap_retry_targeted_success_rate"])
         )
@@ -860,6 +864,9 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 full["oomphlap_verify_trigger_channel_failure"]
             ),
             "oomphlap_retry_strategy": full["oomphlap_retry_strategy"],
+            "oomphlap_retry_max_attempts": int(
+                full["oomphlap_retry_max_attempts"]
+            ),
             "oomphlap_retry_candidate_count": int(
                 full["oomphlap_retry_candidate_count"]
             ),
@@ -868,6 +875,9 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 6,
             ),
             "oomphlap_retry_attempted": int(full["oomphlap_retry_attempted"]),
+            "oomphlap_retry_attempts_used": int(
+                full["oomphlap_retry_attempts_used"]
+            ),
             "oomphlap_retry_succeeded": int(full["oomphlap_retry_succeeded"]),
             "oomphlap_retry_draw_minus_success_rate": round(
                 float(full["oomphlap_retry_draw_minus_success_rate"]),
@@ -1129,6 +1139,14 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         ),
         "avg_oomphlap_min_threshold_distance": round(
             bench_metrics.mean(oomphlap_min_threshold_distances),
+            6,
+        ),
+        "avg_oomphlap_retry_max_attempts": round(
+            bench_metrics.mean(oomphlap_retry_max_attempts),
+            6,
+        ),
+        "avg_oomphlap_retry_attempts_used": round(
+            bench_metrics.mean(oomphlap_retry_attempts_used),
             6,
         ),
         "avg_oomphlap_retry_targeted_success_rate": round(

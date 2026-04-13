@@ -181,9 +181,11 @@ def test_sim4_trial_reports_failure_fields():
     assert "oomphlap_verify_trigger_margin" in result
     assert "oomphlap_verify_trigger_channel_failure" in result
     assert "oomphlap_retry_strategy" in result
+    assert "oomphlap_retry_max_attempts" in result
     assert "oomphlap_retry_candidate_count" in result
     assert "oomphlap_retry_targeted_success_rate" in result
     assert "oomphlap_retry_attempted" in result
+    assert "oomphlap_retry_attempts_used" in result
     assert "oomphlap_retry_succeeded" in result
     assert "oomphlap_retry_draw_minus_success_rate" in result
     assert result["failure_reason"]
@@ -256,9 +258,11 @@ def test_sim4_trial_reports_failure_fields():
         "margin_guard_rewrite",
         "generic_retry",
     }
+    assert result["oomphlap_retry_max_attempts"] >= 0
     assert result["oomphlap_retry_candidate_count"] >= 0
     assert 0.0 <= result["oomphlap_retry_targeted_success_rate"] <= 0.995
     assert result["oomphlap_retry_attempted"] in {0, 1}
+    assert result["oomphlap_retry_attempts_used"] >= 0
     assert result["oomphlap_retry_succeeded"] in {0, 1}
 
 
@@ -357,9 +361,11 @@ def test_sim4_oomphlap_retry_telemetry_reports_forced_failure():
     assert result["oomphlap_verify_flag"] == 1
     assert result["oomphlap_verify_trigger_channel_failure"] == 1
     assert result["oomphlap_retry_strategy"] == "targeted_channel_rewrite"
+    assert result["oomphlap_retry_max_attempts"] == 2
     assert result["oomphlap_retry_candidate_count"] == 1
     assert result["oomphlap_retry_attempted"] == 1
     assert result["oomphlap_retry_succeeded"] == 0
+    assert result["oomphlap_retry_attempts_used"] == 2
     assert result["oomphlap_initial_bit_error_count"] > 0
     assert (
         result["oomphlap_final_bit_error_count"]
@@ -387,10 +393,12 @@ def test_sim4_oomphlap_retry_telemetry_reports_forced_success():
 
     assert result["oomphlap_verify_flag"] == 1
     assert result["oomphlap_retry_strategy"] == "targeted_channel_rewrite"
+    assert result["oomphlap_retry_max_attempts"] == 2
     assert result["oomphlap_retry_candidate_count"] == 1
     assert result["oomphlap_retry_targeted_success_rate"] > 0.99
     assert result["oomphlap_retry_attempted"] == 1
     assert result["oomphlap_retry_succeeded"] == 1
+    assert 1 <= result["oomphlap_retry_attempts_used"] <= 2
     assert result["oomphlap_final_bit_error_count"] == 0
 
 
@@ -409,6 +417,7 @@ def test_sim4_oomphlap_retry_plan_targets_explicit_channel_failures():
     )
 
     assert plan["strategy"] == "targeted_channel_rewrite"
+    assert plan["max_attempts"] == 2
     assert plan["candidate_indices"] == [0]
     assert plan["targeted_success_rate"] > scenario["oomphlap_retry_success_rate"]
 
