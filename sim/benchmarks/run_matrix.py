@@ -411,13 +411,17 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     no_consolidate_successes = []
     failure_counts: Dict[str, int] = {}
     damage_fractions = []
+    diff_counts = []
     missing_fractions = []
+    missing_counts = []
+    missing_to_diff_ratios = []
     severity_scores = []
     geometry_scores = []
     cluster_counts = []
     largest_cluster_shares = []
     largest_cluster_bbox_fractions = []
     largest_cluster_fill_ratios = []
+    focus_source_missing_flags = []
     focus_boundary_shares = []
     focus_interior_shares = []
     focus_strengths = []
@@ -426,10 +430,14 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     interior_rewrite_fractions = []
     rewrite_usage_flags = []
     rewrite_coverage_fractions = []
+    boundary_candidate_counts = []
     boundary_rewrite_coverage_fractions = []
+    boundary_selected_counts = []
     interior_rewrite_coverage_fractions = []
     boundary_rewrite_capture_rates = []
+    interior_candidate_counts = []
     interior_rewrite_capture_rates = []
+    interior_selected_counts = []
     correction_attempts = []
     second_pass_flags = []
     first_pass_recovery_deltas = []
@@ -475,7 +483,10 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         no_correction_successes.append(no_correction["overall_success"])
         no_consolidate_successes.append(no_consolidate["overall_success"])
         damage_fractions.append(float(full["hologram_damage_fraction"]))
+        diff_counts.append(float(full["hologram_diff_count"]))
         missing_fractions.append(float(full["hologram_missing_fraction"]))
+        missing_counts.append(float(full["hologram_missing_count"]))
+        missing_to_diff_ratios.append(float(full["hologram_missing_to_diff_ratio"]))
         severity_scores.append(float(full["hologram_severity_score"]))
         geometry_scores.append(float(full["hologram_geometry_score"]))
         cluster_counts.append(float(full["hologram_damage_cluster_count"]))
@@ -485,6 +496,9 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         )
         largest_cluster_fill_ratios.append(
             float(full["hologram_largest_cluster_fill_ratio"])
+        )
+        focus_source_missing_flags.append(
+            1.0 if full["hologram_focus_source"] == "missing_mask" else 0.0
         )
         focus_boundary_shares.append(float(full["hologram_focus_boundary_share"]))
         focus_interior_shares.append(float(full["hologram_focus_interior_share"]))
@@ -500,8 +514,14 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         rewrite_coverage_fractions.append(
             float(full["correction_rewrite_coverage_fraction"])
         )
+        boundary_candidate_counts.append(
+            float(full["correction_boundary_candidate_count"])
+        )
         boundary_rewrite_coverage_fractions.append(
             float(full["correction_boundary_rewrite_coverage_fraction"])
+        )
+        boundary_selected_counts.append(
+            float(full["correction_boundary_selected_count"])
         )
         interior_rewrite_coverage_fractions.append(
             float(full["correction_interior_rewrite_coverage_fraction"])
@@ -509,8 +529,14 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         boundary_rewrite_capture_rates.append(
             float(full["correction_boundary_rewrite_capture_rate"])
         )
+        interior_candidate_counts.append(
+            float(full["correction_interior_candidate_count"])
+        )
         interior_rewrite_capture_rates.append(
             float(full["correction_interior_rewrite_capture_rate"])
+        )
+        interior_selected_counts.append(
+            float(full["correction_interior_selected_count"])
         )
         correction_attempts.append(float(full["correction_attempts_used"]))
         second_pass_flags.append(float(full["correction_used_second_pass"]))
@@ -560,8 +586,14 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["hologram_damage_fraction"]),
                 6,
             ),
+            "hologram_diff_count": int(full["hologram_diff_count"]),
             "hologram_missing_fraction": round(
                 float(full["hologram_missing_fraction"]),
+                6,
+            ),
+            "hologram_missing_count": int(full["hologram_missing_count"]),
+            "hologram_missing_to_diff_ratio": round(
+                float(full["hologram_missing_to_diff_ratio"]),
                 6,
             ),
             "hologram_severity_score": round(
@@ -585,6 +617,7 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["hologram_largest_cluster_fill_ratio"]),
                 6,
             ),
+            "hologram_focus_source": full["hologram_focus_source"],
             "hologram_focus_boundary_share": round(
                 float(full["hologram_focus_boundary_share"]),
                 6,
@@ -619,9 +652,15 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["correction_rewrite_coverage_fraction"]),
                 6,
             ),
+            "correction_boundary_candidate_count": int(
+                full["correction_boundary_candidate_count"]
+            ),
             "correction_boundary_rewrite_coverage_fraction": round(
                 float(full["correction_boundary_rewrite_coverage_fraction"]),
                 6,
+            ),
+            "correction_boundary_selected_count": int(
+                full["correction_boundary_selected_count"]
             ),
             "correction_interior_rewrite_coverage_fraction": round(
                 float(full["correction_interior_rewrite_coverage_fraction"]),
@@ -631,9 +670,15 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["correction_boundary_rewrite_capture_rate"]),
                 6,
             ),
+            "correction_interior_candidate_count": int(
+                full["correction_interior_candidate_count"]
+            ),
             "correction_interior_rewrite_capture_rate": round(
                 float(full["correction_interior_rewrite_capture_rate"]),
                 6,
+            ),
+            "correction_interior_selected_count": int(
+                full["correction_interior_selected_count"]
             ),
             "correction_first_pass_recovery_delta": round(
                 float(full["correction_first_pass_recovery_delta"]),
@@ -736,9 +781,15 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         ),
         "min_success_rate": round(full_success_rate, 6),
         "pipeline_failure_rate": round(1.0 - full_success_rate, 6),
+        "avg_hologram_diff_count": round(bench_metrics.mean(diff_counts), 6),
         "avg_hologram_damage_fraction": round(bench_metrics.mean(damage_fractions), 6),
+        "avg_hologram_missing_count": round(bench_metrics.mean(missing_counts), 6),
         "avg_hologram_missing_fraction": round(
             bench_metrics.mean(missing_fractions),
+            6,
+        ),
+        "avg_hologram_missing_to_diff_ratio": round(
+            bench_metrics.mean(missing_to_diff_ratios),
             6,
         ),
         "avg_hologram_severity_score": round(bench_metrics.mean(severity_scores), 6),
@@ -754,6 +805,10 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         ),
         "avg_hologram_largest_cluster_fill_ratio": round(
             bench_metrics.mean(largest_cluster_fill_ratios),
+            6,
+        ),
+        "focus_source_missing_rate": round(
+            bench_metrics.mean(focus_source_missing_flags),
             6,
         ),
         "avg_hologram_focus_boundary_share": round(
@@ -786,8 +841,16 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             bench_metrics.mean(rewrite_coverage_fractions),
             6,
         ),
+        "avg_correction_boundary_candidate_count": round(
+            bench_metrics.mean(boundary_candidate_counts),
+            6,
+        ),
         "avg_correction_boundary_rewrite_coverage_fraction": round(
             bench_metrics.mean(boundary_rewrite_coverage_fractions),
+            6,
+        ),
+        "avg_correction_boundary_selected_count": round(
+            bench_metrics.mean(boundary_selected_counts),
             6,
         ),
         "avg_correction_interior_rewrite_coverage_fraction": round(
@@ -798,8 +861,16 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             bench_metrics.mean(boundary_rewrite_capture_rates),
             6,
         ),
+        "avg_correction_interior_candidate_count": round(
+            bench_metrics.mean(interior_candidate_counts),
+            6,
+        ),
         "avg_correction_interior_rewrite_capture_rate": round(
             bench_metrics.mean(interior_rewrite_capture_rates),
+            6,
+        ),
+        "avg_correction_interior_selected_count": round(
+            bench_metrics.mean(interior_selected_counts),
             6,
         ),
         "second_pass_usage_rate": round(bench_metrics.mean(second_pass_flags), 6),

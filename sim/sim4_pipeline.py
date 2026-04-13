@@ -443,6 +443,25 @@ def _measure_damage_geometry(mask):
     }
 
 
+def _choose_geometry_focus_mask(diff_mask, missing_mask):
+    diff_count = int(np.count_nonzero(diff_mask))
+    missing_count = int(np.count_nonzero(missing_mask))
+    if diff_count <= 0:
+        return diff_mask, "diff_mask", diff_count, missing_count, 0.0
+
+    missing_to_diff_ratio = float(missing_count / diff_count)
+    min_missing_support = max(4, int(np.ceil(0.05 * diff_count)))
+    if missing_count >= min_missing_support:
+        return (
+            missing_mask,
+            "missing_mask",
+            diff_count,
+            missing_count,
+            missing_to_diff_ratio,
+        )
+    return diff_mask, "diff_mask", diff_count, missing_count, missing_to_diff_ratio
+
+
 def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
     diff = np.abs(holo_clean - holo_corrupt)
     diff_mask = diff > 1e-6
@@ -450,7 +469,10 @@ def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
     mean_abs_delta = float(diff[diff_mask].mean()) if np.any(diff_mask) else 0.0
     missing_mask = diff_mask & (holo_corrupt < 0.02) & (holo_clean > 0.08)
     missing_fraction = float(np.mean(missing_mask))
-    geometry = _measure_damage_geometry(missing_mask if np.any(missing_mask) else diff_mask)
+    geometry_mask, focus_source, diff_count, missing_count, missing_to_diff_ratio = (
+        _choose_geometry_focus_mask(diff_mask, missing_mask)
+    )
+    geometry = _measure_damage_geometry(geometry_mask)
 
     mode_profiles = {
         "block_dropout": {
@@ -517,8 +539,12 @@ def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
 
     return {
         "damage_fraction": damage_fraction,
+        "diff_count": diff_count,
         "mean_abs_delta": mean_abs_delta,
+        "missing_count": missing_count,
         "missing_fraction": missing_fraction,
+        "missing_to_diff_ratio": missing_to_diff_ratio,
+        "focus_source": focus_source,
         "severity_score": severity_score,
         **geometry,
         **profile,
@@ -673,14 +699,20 @@ def _apply_contiguous_region_rewrite(
         and not np.any(focus_interior_candidates)
     ):
         return hologram.copy(), {
+            "boundary_candidate_count": 0,
+            "boundary_selected_count": 0,
             "total_coverage_fraction": 0.0,
             "boundary_coverage_fraction": 0.0,
             "interior_coverage_fraction": 0.0,
             "boundary_capture_rate": 0.0,
+            "interior_candidate_count": 0,
             "interior_capture_rate": 0.0,
+            "interior_selected_count": 0,
         }
 
     normalized_depth = damage_profile["focus_depth_normalized"]
+    boundary_candidate_count = int(np.count_nonzero(focus_boundary_candidates))
+    interior_candidate_count = int(np.count_nonzero(focus_interior_candidates))
     boundary_rewrite_mask = _select_rewrite_region(
         focus_boundary_candidates,
         normalized_depth,
@@ -700,23 +732,27 @@ def _apply_contiguous_region_rewrite(
     corrected = hologram.copy()
     corrected[rewrite_mask] = holo_clean[rewrite_mask]
     total_damaged = max(1, np.count_nonzero(diff_mask))
+    boundary_selected_count = int(np.count_nonzero(boundary_rewrite_mask))
+    interior_selected_count = int(np.count_nonzero(interior_rewrite_mask))
     rewrite_coverage = float(np.count_nonzero(rewrite_mask) / total_damaged)
-    boundary_coverage = float(np.count_nonzero(boundary_rewrite_mask) / total_damaged)
-    interior_coverage = float(np.count_nonzero(interior_rewrite_mask) / total_damaged)
+    boundary_coverage = float(boundary_selected_count / total_damaged)
+    interior_coverage = float(interior_selected_count / total_damaged)
     boundary_capture_rate = float(
-        np.count_nonzero(boundary_rewrite_mask)
-        / max(1, np.count_nonzero(focus_boundary_candidates))
+        boundary_selected_count / max(1, boundary_candidate_count)
     )
     interior_capture_rate = float(
-        np.count_nonzero(interior_rewrite_mask)
-        / max(1, np.count_nonzero(focus_interior_candidates))
+        interior_selected_count / max(1, interior_candidate_count)
     )
     return corrected, {
+        "boundary_candidate_count": boundary_candidate_count,
+        "boundary_selected_count": boundary_selected_count,
         "total_coverage_fraction": rewrite_coverage,
         "boundary_coverage_fraction": boundary_coverage,
         "interior_coverage_fraction": interior_coverage,
         "boundary_capture_rate": boundary_capture_rate,
+        "interior_candidate_count": interior_candidate_count,
         "interior_capture_rate": interior_capture_rate,
+        "interior_selected_count": interior_selected_count,
     }
 
 
@@ -766,10 +802,14 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
     used_second_pass = False
     rewrite_applied = False
     rewrite_coverage = 0.0
+    boundary_candidate_count = 0
     boundary_rewrite_coverage = 0.0
     interior_rewrite_coverage = 0.0
+    boundary_selected_count = 0
     boundary_rewrite_capture_rate = 0.0
+    interior_candidate_count = 0
     interior_rewrite_capture_rate = 0.0
+    interior_selected_count = 0
     rewrite_score = float(score_before)
     first_pass_score = float(score_before)
     second_pass_score = float(score_before)
@@ -799,11 +839,15 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
             rates["boundary_rewrite_fraction"],
             rates["interior_rewrite_fraction"],
         )
+        boundary_candidate_count = rewrite_meta["boundary_candidate_count"]
         rewrite_coverage = rewrite_meta["total_coverage_fraction"]
         boundary_rewrite_coverage = rewrite_meta["boundary_coverage_fraction"]
         interior_rewrite_coverage = rewrite_meta["interior_coverage_fraction"]
+        boundary_selected_count = rewrite_meta["boundary_selected_count"]
         boundary_rewrite_capture_rate = rewrite_meta["boundary_capture_rate"]
+        interior_candidate_count = rewrite_meta["interior_candidate_count"]
         interior_rewrite_capture_rate = rewrite_meta["interior_capture_rate"]
+        interior_selected_count = rewrite_meta["interior_selected_count"]
         rewrite_score, _, _ = verify_fidelity(rec_clean, reconstruct(rewrite_candidate))
         rewrite_applied = True
         if rewrite_score >= best_score:
@@ -838,8 +882,12 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         "first_pass_rate": rates["first_pass_rate"],
         "second_pass_rate": rates["second_pass_rate"],
         "damage_fraction": damage_profile["damage_fraction"],
+        "diff_count": damage_profile["diff_count"],
         "missing_fraction": damage_profile["missing_fraction"],
+        "missing_count": damage_profile["missing_count"],
+        "missing_to_diff_ratio": damage_profile["missing_to_diff_ratio"],
         "mean_abs_delta": damage_profile["mean_abs_delta"],
+        "focus_source": damage_profile["focus_source"],
         "severity_score": damage_profile["severity_score"],
         "cluster_count": damage_profile["cluster_count"],
         "largest_cluster_share": damage_profile["largest_cluster_share"],
@@ -854,10 +902,14 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         "interior_rewrite_fraction": rates["interior_rewrite_fraction"],
         "rewrite_applied": rewrite_applied,
         "rewrite_coverage_fraction": rewrite_coverage,
+        "boundary_candidate_count": boundary_candidate_count,
         "boundary_rewrite_coverage_fraction": boundary_rewrite_coverage,
+        "boundary_selected_count": boundary_selected_count,
         "interior_rewrite_coverage_fraction": interior_rewrite_coverage,
         "boundary_rewrite_capture_rate": boundary_rewrite_capture_rate,
+        "interior_candidate_count": interior_candidate_count,
         "interior_rewrite_capture_rate": interior_rewrite_capture_rate,
+        "interior_selected_count": interior_selected_count,
         "first_pass_score": float(first_pass_score),
         "rewrite_score": float(rewrite_score),
         "second_pass_score": float(second_pass_score),
@@ -1018,8 +1070,12 @@ def simulate_pipeline_trial(
         "first_pass_rate": correction_rates["first_pass_rate"],
         "second_pass_rate": correction_rates["second_pass_rate"],
         "damage_fraction": damage_profile["damage_fraction"],
+        "diff_count": damage_profile["diff_count"],
         "missing_fraction": damage_profile["missing_fraction"],
+        "missing_count": damage_profile["missing_count"],
+        "missing_to_diff_ratio": damage_profile["missing_to_diff_ratio"],
         "mean_abs_delta": damage_profile["mean_abs_delta"],
+        "focus_source": damage_profile["focus_source"],
         "severity_score": damage_profile["severity_score"],
         "cluster_count": damage_profile["cluster_count"],
         "largest_cluster_share": damage_profile["largest_cluster_share"],
@@ -1034,10 +1090,14 @@ def simulate_pipeline_trial(
         "interior_rewrite_fraction": correction_rates["interior_rewrite_fraction"],
         "rewrite_applied": False,
         "rewrite_coverage_fraction": 0.0,
+        "boundary_candidate_count": 0,
         "boundary_rewrite_coverage_fraction": 0.0,
+        "boundary_selected_count": 0,
         "interior_rewrite_coverage_fraction": 0.0,
         "boundary_rewrite_capture_rate": 0.0,
+        "interior_candidate_count": 0,
         "interior_rewrite_capture_rate": 0.0,
+        "interior_selected_count": 0,
         "first_pass_score": float(score_before),
         "rewrite_score": float(score_before),
         "second_pass_score": float(score_before),
@@ -1110,8 +1170,14 @@ def simulate_pipeline_trial(
         "ssim_after": float(score_after),
         "hologram_success": int(intact_after),
         "hologram_damage_fraction": float(correction_meta["damage_fraction"]),
+        "hologram_diff_count": int(correction_meta["diff_count"]),
         "hologram_missing_fraction": float(correction_meta["missing_fraction"]),
+        "hologram_missing_count": int(correction_meta["missing_count"]),
+        "hologram_missing_to_diff_ratio": float(
+            correction_meta["missing_to_diff_ratio"]
+        ),
         "hologram_mean_abs_delta": float(correction_meta["mean_abs_delta"]),
+        "hologram_focus_source": correction_meta["focus_source"],
         "hologram_severity_score": float(correction_meta["severity_score"]),
         "hologram_geometry_score": float(correction_meta["geometry_score"]),
         "hologram_damage_cluster_count": int(correction_meta["cluster_count"]),
@@ -1148,8 +1214,14 @@ def simulate_pipeline_trial(
         "correction_rewrite_coverage_fraction": float(
             correction_meta["rewrite_coverage_fraction"]
         ),
+        "correction_boundary_candidate_count": int(
+            correction_meta["boundary_candidate_count"]
+        ),
         "correction_boundary_rewrite_coverage_fraction": float(
             correction_meta["boundary_rewrite_coverage_fraction"]
+        ),
+        "correction_boundary_selected_count": int(
+            correction_meta["boundary_selected_count"]
         ),
         "correction_interior_rewrite_coverage_fraction": float(
             correction_meta["interior_rewrite_coverage_fraction"]
@@ -1157,8 +1229,14 @@ def simulate_pipeline_trial(
         "correction_boundary_rewrite_capture_rate": float(
             correction_meta["boundary_rewrite_capture_rate"]
         ),
+        "correction_interior_candidate_count": int(
+            correction_meta["interior_candidate_count"]
+        ),
         "correction_interior_rewrite_capture_rate": float(
             correction_meta["interior_rewrite_capture_rate"]
+        ),
+        "correction_interior_selected_count": int(
+            correction_meta["interior_selected_count"]
         ),
         "correction_first_pass_rate": float(correction_meta["first_pass_rate"]),
         "correction_second_pass_rate": float(correction_meta["second_pass_rate"]),

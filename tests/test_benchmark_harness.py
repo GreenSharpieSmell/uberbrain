@@ -402,24 +402,36 @@ class TestRunMatrixClaimRigor:
         assert summary["all_ablations_modeled"] == 1.0
         assert "uplift_vs_modeled_ablations" in summary
         assert "pipeline_failure_rate" in summary
+        assert "avg_hologram_diff_count" in summary
+        assert "avg_hologram_missing_count" in summary
+        assert "avg_hologram_missing_to_diff_ratio" in summary
         assert "avg_hologram_severity_score" in summary
         assert "avg_hologram_geometry_score" in summary
         assert "avg_hologram_largest_cluster_share" in summary
+        assert "focus_source_missing_rate" in summary
         assert "avg_hologram_focus_boundary_share" in summary
         assert "avg_hologram_focus_interior_share" in summary
         assert "threshold_crossing_recovery_rate" in summary
         assert "avg_rewrite_recovery_delta" in summary
         assert "avg_correction_interior_rewrite_fraction" in summary
+        assert "avg_correction_boundary_candidate_count" in summary
+        assert "avg_correction_boundary_selected_count" in summary
+        assert "avg_correction_interior_candidate_count" in summary
         assert "avg_correction_interior_rewrite_coverage_fraction" in summary
         assert "avg_correction_interior_rewrite_capture_rate" in summary
+        assert "avg_correction_interior_selected_count" in summary
         assert "avg_total_recovery_delta" in summary
         assert "block_dropout_success_rate" in summary
         assert "block_dropout_threshold_crossing_rate" in summary
         assert "failure_count_multi_stage" in summary
         assert "uplift_vs_no_consolidate_bleach" in summary
         assert "failure_detail_full" in trial_row
+        assert "hologram_diff_count" in trial_row
+        assert "hologram_missing_count" in trial_row
+        assert "hologram_missing_to_diff_ratio" in trial_row
         assert "hologram_severity_score" in trial_row
         assert "hologram_geometry_score" in trial_row
+        assert "hologram_focus_source" in trial_row
         assert "hologram_focus_boundary_share" in trial_row
         assert "hologram_focus_interior_share" in trial_row
         assert "hologram_threshold_crossed_after_recovery" in trial_row
@@ -430,9 +442,15 @@ class TestRunMatrixClaimRigor:
         assert "correction_boundary_rewrite_fraction" in trial_row
         assert "correction_interior_rewrite_fraction" in trial_row
         assert "correction_rewrite_coverage_fraction" in trial_row
+        assert "correction_boundary_candidate_count" in trial_row
         assert "correction_boundary_rewrite_coverage_fraction" in trial_row
+        assert "correction_boundary_selected_count" in trial_row
         assert "correction_interior_rewrite_coverage_fraction" in trial_row
         assert "correction_boundary_rewrite_capture_rate" in trial_row
+        assert "correction_interior_candidate_count" in trial_row
         assert "correction_interior_rewrite_capture_rate" in trial_row
+        assert "correction_interior_selected_count" in trial_row
         assert "correction_rewrite_recovery_delta" in trial_row
         assert "correction_total_recovery_delta" in trial_row
+        assert summary["avg_hologram_diff_count"] >= summary["avg_hologram_missing_count"]
+        assert 0.0 <= summary["focus_source_missing_rate"] <= 1.0

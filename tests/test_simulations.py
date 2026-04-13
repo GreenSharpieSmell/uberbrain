@@ -133,7 +133,11 @@ def test_sim4_trial_reports_failure_fields():
     assert "graph_critical_ratio" in result
     assert "graph_repair_backlog_ratio" in result
     assert "hologram_damage_fraction" in result
+    assert "hologram_diff_count" in result
     assert "hologram_missing_fraction" in result
+    assert "hologram_missing_count" in result
+    assert "hologram_missing_to_diff_ratio" in result
+    assert "hologram_focus_source" in result
     assert "hologram_severity_score" in result
     assert "hologram_geometry_score" in result
     assert "hologram_damage_cluster_count" in result
@@ -147,16 +151,24 @@ def test_sim4_trial_reports_failure_fields():
     assert "correction_boundary_rewrite_fraction" in result
     assert "correction_interior_rewrite_fraction" in result
     assert "correction_rewrite_coverage_fraction" in result
+    assert "correction_boundary_candidate_count" in result
     assert "correction_boundary_rewrite_coverage_fraction" in result
+    assert "correction_boundary_selected_count" in result
     assert "correction_interior_rewrite_coverage_fraction" in result
     assert "correction_boundary_rewrite_capture_rate" in result
+    assert "correction_interior_candidate_count" in result
     assert "correction_interior_rewrite_capture_rate" in result
+    assert "correction_interior_selected_count" in result
     assert "correction_rewrite_recovery_delta" in result
     assert "correction_total_recovery_delta" in result
     assert result["failure_reason"]
     assert result["failure_detail"]
     assert result["hologram_damage_fraction"] >= 0.0
+    assert result["hologram_diff_count"] >= 0
     assert result["hologram_missing_fraction"] >= 0.0
+    assert result["hologram_missing_count"] >= 0
+    assert 0.0 <= result["hologram_missing_to_diff_ratio"] <= 1.0
+    assert result["hologram_focus_source"] in {"diff_mask", "missing_mask"}
     assert result["hologram_severity_score"] >= 0.0
     assert result["hologram_geometry_score"] >= 0.0
     assert result["hologram_damage_cluster_count"] >= 0
@@ -175,10 +187,16 @@ def test_sim4_trial_reports_failure_fields():
     assert result["correction_boundary_rewrite_fraction"] >= 0.0
     assert result["correction_interior_rewrite_fraction"] >= 0.0
     assert result["correction_rewrite_coverage_fraction"] >= 0.0
+    assert result["correction_boundary_candidate_count"] >= 0
     assert result["correction_boundary_rewrite_coverage_fraction"] >= 0.0
+    assert result["correction_boundary_selected_count"] >= 0
     assert result["correction_interior_rewrite_coverage_fraction"] >= 0.0
     assert result["correction_boundary_rewrite_capture_rate"] >= 0.0
+    assert result["correction_interior_candidate_count"] >= 0
     assert result["correction_interior_rewrite_capture_rate"] >= 0.0
+    assert result["correction_interior_selected_count"] >= 0
+    assert result["correction_boundary_selected_count"] <= result["correction_boundary_candidate_count"]
+    assert result["correction_interior_selected_count"] <= result["correction_interior_candidate_count"]
     assert result["correction_rewrite_recovery_delta"] >= 0.0
     assert result["correction_total_recovery_delta"] >= 0.0
 
@@ -225,13 +243,36 @@ def test_sim4_block_dropout_uses_contiguous_rewrite_when_repair_is_triggered():
 
     assert result["ssim_before"] < sim4.FIDELITY_WARN
     assert result["correction_rewrite_applied"] == 1
+    assert result["hologram_focus_source"] == "diff_mask"
+    assert result["hologram_focus_interior_share"] > 0.0
     assert result["correction_rewrite_coverage_fraction"] > 0.0
     assert result["correction_interior_rewrite_fraction"] >= result["correction_boundary_rewrite_fraction"]
-    assert (
-        result["correction_interior_rewrite_capture_rate"]
-        >= result["correction_boundary_rewrite_capture_rate"]
-    )
+    assert result["correction_boundary_candidate_count"] > 0
+    assert result["correction_interior_candidate_count"] > 0
+    assert result["correction_boundary_selected_count"] > 0
+    assert result["correction_interior_selected_count"] > 0
+    assert result["correction_interior_rewrite_capture_rate"] > 0.0
     assert result["correction_rewrite_recovery_delta"] >= 0.0
+
+
+def test_sim4_block_dropout_falls_back_to_diff_geometry_when_missing_mask_collapses():
+    scenario = sim4.sample_pipeline_scenario(42)
+    scenario.update({
+        "hologram_mode": "block_dropout",
+        "corrupt_size": 40,
+        "corrupt_x": 18,
+        "corrupt_y": 18,
+    })
+
+    data = sim4.create_data_pattern(scenario["grid_size"], scenario["seed"])
+    holo_clean = sim4.encode_hologram(data)
+    holo_corrupt = sim4._apply_hologram_perturbation(holo_clean, scenario)
+    damage = sim4._measure_hologram_damage(holo_clean, holo_corrupt, scenario)
+
+    assert damage["diff_count"] > damage["missing_count"]
+    assert damage["missing_count"] < max(4, int(np.ceil(0.05 * damage["diff_count"])))
+    assert damage["focus_source"] == "diff_mask"
+    assert damage["focus_interior_share"] > 0.0
 
 
 def test_sim4_block_dropout_geometry_is_more_clustered_than_distributed_dropout():
