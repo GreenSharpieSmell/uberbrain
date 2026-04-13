@@ -473,6 +473,9 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     oomphlap_retry_max_attempts = []
     oomphlap_retry_attempts_used = []
     oomphlap_retry_targeted_success_rates = []
+    oomphlap_failed_channel_in_error_indices_flags = []
+    oomphlap_retry_candidate_source_failed_channel_flags = []
+    oomphlap_retry_candidate_source_error_indices_flags = []
     oomphlap_retry_strategy_targeted_flags = []
     oomphlap_retry_strategy_margin_flags = []
     oomphlap_retry_strategy_generic_flags = []
@@ -655,6 +658,15 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         oomphlap_retry_attempts_used.append(float(full["oomphlap_retry_attempts_used"]))
         oomphlap_retry_targeted_success_rates.append(
             float(full["oomphlap_retry_targeted_success_rate"])
+        )
+        oomphlap_failed_channel_in_error_indices_flags.append(
+            float(full["oomphlap_failed_channel_in_error_indices"])
+        )
+        oomphlap_retry_candidate_source_failed_channel_flags.append(
+            1.0 if full["oomphlap_retry_candidate_source"] == "failed_channel" else 0.0
+        )
+        oomphlap_retry_candidate_source_error_indices_flags.append(
+            1.0 if full["oomphlap_retry_candidate_source"] == "error_indices" else 0.0
         )
         oomphlap_retry_strategy_targeted_flags.append(
             1.0 if full["oomphlap_retry_strategy"] == "targeted_channel_rewrite" else 0.0
@@ -913,11 +925,15 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 full["oomphlap_verify_trigger_channel_failure"]
             ),
             "oomphlap_retry_strategy": full["oomphlap_retry_strategy"],
+            "oomphlap_retry_candidate_source": full["oomphlap_retry_candidate_source"],
             "oomphlap_retry_max_attempts": int(
                 full["oomphlap_retry_max_attempts"]
             ),
             "oomphlap_retry_candidate_count": int(
                 full["oomphlap_retry_candidate_count"]
+            ),
+            "oomphlap_failed_channel_in_error_indices": int(
+                full["oomphlap_failed_channel_in_error_indices"]
             ),
             "oomphlap_retry_targeted_success_rate": round(
                 float(full["oomphlap_retry_targeted_success_rate"]),
@@ -1225,6 +1241,18 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         ),
         "avg_oomphlap_retry_targeted_success_rate": round(
             bench_metrics.mean(oomphlap_retry_targeted_success_rates),
+            6,
+        ),
+        "oomphlap_failed_channel_in_error_indices_rate": round(
+            bench_metrics.mean(oomphlap_failed_channel_in_error_indices_flags),
+            6,
+        ),
+        "oomphlap_retry_candidate_source_failed_channel_rate": round(
+            bench_metrics.mean(oomphlap_retry_candidate_source_failed_channel_flags),
+            6,
+        ),
+        "oomphlap_retry_candidate_source_error_indices_rate": round(
+            bench_metrics.mean(oomphlap_retry_candidate_source_error_indices_flags),
             6,
         ),
         "oomphlap_verify_rate": round(bench_metrics.mean(oomphlap_verify_flags), 6),

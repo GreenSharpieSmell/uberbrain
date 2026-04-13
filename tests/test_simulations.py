@@ -188,8 +188,10 @@ def test_sim4_trial_reports_failure_fields():
     assert "oomphlap_verify_trigger_margin" in result
     assert "oomphlap_verify_trigger_channel_failure" in result
     assert "oomphlap_retry_strategy" in result
+    assert "oomphlap_retry_candidate_source" in result
     assert "oomphlap_retry_max_attempts" in result
     assert "oomphlap_retry_candidate_count" in result
+    assert "oomphlap_failed_channel_in_error_indices" in result
     assert "oomphlap_retry_targeted_success_rate" in result
     assert "oomphlap_retry_attempted" in result
     assert "oomphlap_retry_attempts_used" in result
@@ -273,8 +275,15 @@ def test_sim4_trial_reports_failure_fields():
         "margin_guard_rewrite",
         "generic_retry",
     }
+    assert result["oomphlap_retry_candidate_source"] in {
+        "none",
+        "failed_channel",
+        "error_indices",
+        "margin_guard",
+    }
     assert result["oomphlap_retry_max_attempts"] >= 0
     assert result["oomphlap_retry_candidate_count"] >= 0
+    assert result["oomphlap_failed_channel_in_error_indices"] in {0, 1}
     assert 0.0 <= result["oomphlap_retry_targeted_success_rate"] <= 0.995
     assert result["oomphlap_retry_attempted"] in {0, 1}
     assert result["oomphlap_retry_attempts_used"] >= 0
@@ -376,8 +385,10 @@ def test_sim4_oomphlap_retry_telemetry_reports_forced_failure():
     assert result["oomphlap_verify_flag"] == 1
     assert result["oomphlap_verify_trigger_channel_failure"] == 1
     assert result["oomphlap_retry_strategy"] == "targeted_channel_rewrite"
+    assert result["oomphlap_retry_candidate_source"] == "failed_channel"
     assert result["oomphlap_retry_max_attempts"] == 2
     assert result["oomphlap_retry_candidate_count"] == 1
+    assert result["oomphlap_failed_channel_in_error_indices"] == 1
     assert result["oomphlap_retry_attempted"] == 1
     assert result["oomphlap_retry_succeeded"] == 0
     assert result["oomphlap_retry_attempts_used"] == 2
@@ -408,8 +419,10 @@ def test_sim4_oomphlap_retry_telemetry_reports_forced_success():
 
     assert result["oomphlap_verify_flag"] == 1
     assert result["oomphlap_retry_strategy"] == "targeted_channel_rewrite"
+    assert result["oomphlap_retry_candidate_source"] == "failed_channel"
     assert result["oomphlap_retry_max_attempts"] == 2
     assert result["oomphlap_retry_candidate_count"] == 1
+    assert result["oomphlap_failed_channel_in_error_indices"] == 1
     assert result["oomphlap_retry_targeted_success_rate"] > 0.99
     assert result["oomphlap_retry_attempted"] == 1
     assert result["oomphlap_retry_succeeded"] == 1
@@ -432,9 +445,51 @@ def test_sim4_oomphlap_retry_plan_targets_explicit_channel_failures():
     )
 
     assert plan["strategy"] == "targeted_channel_rewrite"
+    assert plan["candidate_source"] == "failed_channel"
+    assert plan["failed_channel_in_error_indices"] is True
     assert plan["max_attempts"] == 2
     assert plan["candidate_indices"] == [0]
     assert plan["targeted_success_rate"] > scenario["oomphlap_retry_success_rate"]
+
+
+def test_sim4_oomphlap_retry_plan_targets_actual_error_when_failed_channel_is_clean():
+    scenario = sim4.sample_pipeline_scenario(42)
+    plan = sim4._derive_oomphlap_retry_plan(
+        bits=[0, 1, 0],
+        decoded=[0, 1, 1],
+        noisy_levels=[0.0, 0.707824, 0.570843],
+        scenario=scenario,
+        failure_mode="stuck_low",
+        failed_channel=0,
+        verify_trigger_margin=True,
+        verify_trigger_channel_failure=True,
+    )
+
+    assert plan["strategy"] == "targeted_channel_rewrite"
+    assert plan["candidate_source"] == "error_indices"
+    assert plan["failed_channel_in_error_indices"] is False
+    assert plan["candidate_indices"] == [2]
+    assert plan["max_attempts"] == 2
+
+
+def test_sim4_oomphlap_random_single_channel_fault_gets_third_retry():
+    scenario = sim4.sample_pipeline_scenario(42)
+    plan = sim4._derive_oomphlap_retry_plan(
+        bits=[0, 1, 1],
+        decoded=[0, 1, 0],
+        noisy_levels=[0.403983, 0.723571, 0.429765],
+        scenario=scenario,
+        failure_mode="random",
+        failed_channel=2,
+        verify_trigger_margin=False,
+        verify_trigger_channel_failure=True,
+    )
+
+    assert plan["strategy"] == "targeted_channel_rewrite"
+    assert plan["candidate_source"] == "failed_channel"
+    assert plan["failed_channel_in_error_indices"] is True
+    assert plan["candidate_indices"] == [2]
+    assert plan["max_attempts"] == 3
 
 
 def test_sim4_spillover_polish_recovers_non_focus_residuals():

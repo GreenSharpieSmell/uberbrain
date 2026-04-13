@@ -302,12 +302,22 @@ def _derive_oomphlap_retry_plan(
             "max_attempts": 0,
             "strategy": "none",
             "candidate_indices": [],
+            "candidate_source": "none",
+            "failed_channel_in_error_indices": False,
             "targeted_success_rate": 0.0,
         }
 
+    failed_channel_in_error_indices = (
+        failed_channel in error_indices if failed_channel is not None else False
+    )
     if verify_trigger_channel_failure and failed_channel is not None:
         strategy = "targeted_channel_rewrite"
-        candidate_indices = [failed_channel]
+        if failed_channel_in_error_indices:
+            candidate_indices = [failed_channel]
+            candidate_source = "failed_channel"
+        else:
+            candidate_indices = list(error_indices)
+            candidate_source = "error_indices"
     elif verify_trigger_margin:
         strategy = "margin_guard_rewrite"
         candidate_indices = [
@@ -317,16 +327,18 @@ def _derive_oomphlap_retry_plan(
         ]
         if not candidate_indices:
             candidate_indices = list(error_indices)
+        candidate_source = "margin_guard"
     else:
         strategy = "generic_retry"
         candidate_indices = list(error_indices)
+        candidate_source = "error_indices"
 
     max_attempts = 1
     if strategy == "targeted_channel_rewrite":
         if failure_mode in {"stuck_low", "stuck_high"} and len(candidate_indices) == 1:
             max_attempts = 2
         elif failure_mode == "random" and len(candidate_indices) == 1:
-            max_attempts = 2
+            max_attempts = 3
 
     base_success_rate = float(scenario["oomphlap_retry_success_rate"])
     mode_bonus = {
@@ -339,14 +351,29 @@ def _derive_oomphlap_retry_plan(
     single_error_bonus = 0.05 if len(error_indices) == 1 else 0.0
     candidate_penalty = 0.03 * max(0, len(candidate_indices) - 1)
     anomaly_bonus = 0.0
-    if failed_channel is not None:
-        failed_level = noisy_levels[failed_channel]
+    if candidate_indices:
+        candidate_levels = [noisy_levels[idx] for idx in candidate_indices]
+        candidate_targets = [bits[idx] for idx in candidate_indices]
         if failure_mode == "stuck_low":
-            anomaly_bonus = 0.08 * max(0.0, GST_THRESHOLD - failed_level)
+            anomaly_bonus = 0.08 * float(
+                np.mean([
+                    max(0.0, GST_THRESHOLD - level)
+                    for level, target in zip(candidate_levels, candidate_targets)
+                    if target == 1
+                ] or [0.0])
+            )
         elif failure_mode == "stuck_high":
-            anomaly_bonus = 0.08 * max(0.0, failed_level - GST_THRESHOLD)
+            anomaly_bonus = 0.08 * float(
+                np.mean([
+                    max(0.0, level - GST_THRESHOLD)
+                    for level, target in zip(candidate_levels, candidate_targets)
+                    if target == 0
+                ] or [0.0])
+            )
         elif failure_mode == "random":
-            anomaly_bonus = 0.04 * abs(failed_level - GST_THRESHOLD)
+            anomaly_bonus = 0.04 * float(
+                np.mean([abs(level - GST_THRESHOLD) for level in candidate_levels])
+            )
 
     targeted_success_rate = float(
         np.clip(
@@ -364,6 +391,8 @@ def _derive_oomphlap_retry_plan(
         "max_attempts": max_attempts,
         "strategy": strategy,
         "candidate_indices": candidate_indices,
+        "candidate_source": candidate_source,
+        "failed_channel_in_error_indices": bool(failed_channel_in_error_indices),
         "targeted_success_rate": targeted_success_rate,
     }
 
@@ -467,8 +496,12 @@ def _decode_oomphlap(bits, scenario, enable_verify, enable_correction_write):
         "verify_trigger_margin": bool(verify_trigger_margin),
         "verify_trigger_channel_failure": bool(verify_trigger_channel_failure),
         "retry_strategy": retry_plan["strategy"],
+        "retry_candidate_source": retry_plan["candidate_source"],
         "retry_max_attempts": int(retry_plan["max_attempts"]),
         "retry_candidate_count": int(len(retry_plan["candidate_indices"])),
+        "retry_failed_channel_in_error_indices": bool(
+            retry_plan["failed_channel_in_error_indices"]
+        ),
         "retry_targeted_success_rate": float(retry_plan["targeted_success_rate"]),
         "retry_attempted": bool(retry_attempted),
         "retry_attempts_used": int(retry_attempts_used),
@@ -1740,11 +1773,15 @@ def simulate_pipeline_trial(
             oomphlap_result["verify_trigger_channel_failure"]
         ),
         "oomphlap_retry_strategy": oomphlap_result["retry_strategy"],
+        "oomphlap_retry_candidate_source": oomphlap_result["retry_candidate_source"],
         "oomphlap_retry_max_attempts": int(
             oomphlap_result["retry_max_attempts"]
         ),
         "oomphlap_retry_candidate_count": int(
             oomphlap_result["retry_candidate_count"]
+        ),
+        "oomphlap_failed_channel_in_error_indices": int(
+            oomphlap_result["retry_failed_channel_in_error_indices"]
         ),
         "oomphlap_retry_targeted_success_rate": float(
             oomphlap_result["retry_targeted_success_rate"]

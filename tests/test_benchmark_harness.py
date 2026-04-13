@@ -445,6 +445,9 @@ class TestRunMatrixClaimRigor:
         assert "avg_oomphlap_retry_max_attempts" in summary
         assert "avg_oomphlap_retry_attempts_used" in summary
         assert "avg_oomphlap_retry_targeted_success_rate" in summary
+        assert "oomphlap_failed_channel_in_error_indices_rate" in summary
+        assert "oomphlap_retry_candidate_source_failed_channel_rate" in summary
+        assert "oomphlap_retry_candidate_source_error_indices_rate" in summary
         assert "oomphlap_verify_rate" in summary
         assert "oomphlap_verify_margin_trigger_rate" in summary
         assert "oomphlap_verify_channel_failure_trigger_rate" in summary
@@ -515,8 +518,10 @@ class TestRunMatrixClaimRigor:
         assert "oomphlap_verify_trigger_margin" in trial_row
         assert "oomphlap_verify_trigger_channel_failure" in trial_row
         assert "oomphlap_retry_strategy" in trial_row
+        assert "oomphlap_retry_candidate_source" in trial_row
         assert "oomphlap_retry_max_attempts" in trial_row
         assert "oomphlap_retry_candidate_count" in trial_row
+        assert "oomphlap_failed_channel_in_error_indices" in trial_row
         assert "oomphlap_retry_targeted_success_rate" in trial_row
         assert "oomphlap_retry_attempted" in trial_row
         assert "oomphlap_retry_attempts_used" in trial_row
