@@ -168,8 +168,15 @@ def test_sim4_trial_reports_failure_fields():
     assert "correction_spillover_coverage_fraction" in result
     assert "correction_spillover_capture_rate" in result
     assert "correction_spillover_fraction" in result
+    assert "correction_residual_polish_applied" in result
+    assert "correction_residual_candidate_count" in result
+    assert "correction_residual_selected_count" in result
+    assert "correction_residual_coverage_fraction" in result
+    assert "correction_residual_capture_rate" in result
+    assert "correction_residual_fraction" in result
     assert "correction_rewrite_recovery_delta" in result
     assert "correction_spillover_recovery_delta" in result
+    assert "correction_residual_recovery_delta" in result
     assert "correction_total_recovery_delta" in result
     assert "correction_best_stage" in result
     assert "oomphlap_channel_failure" in result
@@ -231,10 +238,17 @@ def test_sim4_trial_reports_failure_fields():
     assert result["correction_spillover_coverage_fraction"] >= 0.0
     assert result["correction_spillover_capture_rate"] >= 0.0
     assert result["correction_spillover_fraction"] >= 0.0
+    assert result["correction_residual_polish_applied"] in {0, 1}
+    assert result["correction_residual_candidate_count"] >= 0
+    assert result["correction_residual_selected_count"] >= 0
+    assert result["correction_residual_coverage_fraction"] >= 0.0
+    assert result["correction_residual_capture_rate"] >= 0.0
+    assert result["correction_residual_fraction"] >= 0.0
     assert result["correction_boundary_selected_count"] <= result["correction_boundary_candidate_count"]
     assert result["correction_interior_selected_count"] <= result["correction_interior_candidate_count"]
     assert result["correction_rewrite_recovery_delta"] >= 0.0
     assert result["correction_spillover_recovery_delta"] >= 0.0
+    assert result["correction_residual_recovery_delta"] >= 0.0
     assert result["correction_total_recovery_delta"] >= 0.0
     assert result["correction_best_stage"] in {
         "pre",
@@ -242,6 +256,7 @@ def test_sim4_trial_reports_failure_fields():
         "rewrite",
         "second_pass",
         "spillover_polish",
+        "residual_polish",
     }
     assert result["oomphlap_channel_failure"] in {"none", "stuck_low", "stuck_high", "random"}
     assert result["oomphlap_failed_channel"] >= -1
@@ -438,6 +453,34 @@ def test_sim4_spillover_polish_recovers_non_focus_residuals():
     assert result["correction_spillover_selected_count"] > 0
     assert result["correction_spillover_capture_rate"] > 0.0
     assert result["correction_spillover_recovery_delta"] > 0.0
+
+
+def test_sim4_residual_polish_rewrites_global_residual_damage():
+    holo_clean = np.zeros((8, 8), dtype=float)
+    hologram = holo_clean.copy()
+    hologram[1:7, 1:7] = 0.0
+    holo_clean[1:7, 1:7] = 1.0
+    damage_profile = {
+        "geometry_score": 0.08,
+        "region_focus_weight": 0.45,
+        "severity_score": 0.03,
+        "mode_name": "distributed_dropout",
+    }
+
+    corrected, meta = sim4._apply_residual_polish(
+        holo_clean,
+        hologram,
+        damage_profile,
+        threshold_gap_after=0.24,
+    )
+
+    assert meta["candidate_count"] == 36
+    assert meta["selected_count"] > 0
+    assert meta["selected_count"] <= meta["candidate_count"]
+    assert meta["coverage_fraction"] > 0.0
+    assert meta["capture_rate"] > 0.0
+    assert meta["fraction"] >= 0.25
+    assert np.count_nonzero(np.abs(corrected - hologram) > 1e-6) == meta["selected_count"]
 
 
 def test_sim4_block_dropout_geometry_is_more_clustered_than_distributed_dropout():

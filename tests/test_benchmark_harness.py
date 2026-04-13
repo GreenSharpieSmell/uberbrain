@@ -430,8 +430,15 @@ class TestRunMatrixClaimRigor:
         assert "avg_correction_spillover_coverage_fraction" in summary
         assert "avg_correction_spillover_capture_rate" in summary
         assert "avg_correction_spillover_fraction" in summary
+        assert "residual_polish_usage_rate" in summary
+        assert "avg_correction_residual_candidate_count" in summary
+        assert "avg_correction_residual_selected_count" in summary
+        assert "avg_correction_residual_coverage_fraction" in summary
+        assert "avg_correction_residual_capture_rate" in summary
+        assert "avg_correction_residual_fraction" in summary
         assert "avg_total_recovery_delta" in summary
         assert "avg_spillover_recovery_delta" in summary
+        assert "avg_residual_recovery_delta" in summary
         assert "avg_oomphlap_initial_bit_error_count" in summary
         assert "avg_oomphlap_final_bit_error_count" in summary
         assert "avg_oomphlap_min_threshold_distance" in summary
@@ -488,8 +495,15 @@ class TestRunMatrixClaimRigor:
         assert "correction_spillover_coverage_fraction" in trial_row
         assert "correction_spillover_capture_rate" in trial_row
         assert "correction_spillover_fraction" in trial_row
+        assert "correction_residual_polish_applied" in trial_row
+        assert "correction_residual_candidate_count" in trial_row
+        assert "correction_residual_selected_count" in trial_row
+        assert "correction_residual_coverage_fraction" in trial_row
+        assert "correction_residual_capture_rate" in trial_row
+        assert "correction_residual_fraction" in trial_row
         assert "correction_rewrite_recovery_delta" in trial_row
         assert "correction_spillover_recovery_delta" in trial_row
+        assert "correction_residual_recovery_delta" in trial_row
         assert "correction_total_recovery_delta" in trial_row
         assert "correction_best_stage" in trial_row
         assert "oomphlap_channel_failure" in trial_row

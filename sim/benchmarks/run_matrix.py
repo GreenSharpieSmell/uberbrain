@@ -448,12 +448,19 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     spillover_coverage_fractions = []
     spillover_capture_rates = []
     spillover_fractions = []
+    residual_usage_flags = []
+    residual_candidate_counts = []
+    residual_selected_counts = []
+    residual_coverage_fractions = []
+    residual_capture_rates = []
+    residual_fractions = []
     correction_attempts = []
     second_pass_flags = []
     first_pass_recovery_deltas = []
     rewrite_recovery_deltas = []
     second_pass_recovery_deltas = []
     spillover_recovery_deltas = []
+    residual_recovery_deltas = []
     total_recovery_deltas = []
     oomphlap_initial_bit_errors = []
     oomphlap_final_bit_errors = []
@@ -596,6 +603,20 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             float(full["correction_spillover_capture_rate"])
         )
         spillover_fractions.append(float(full["correction_spillover_fraction"]))
+        residual_usage_flags.append(float(full["correction_residual_polish_applied"]))
+        residual_candidate_counts.append(
+            float(full["correction_residual_candidate_count"])
+        )
+        residual_selected_counts.append(
+            float(full["correction_residual_selected_count"])
+        )
+        residual_coverage_fractions.append(
+            float(full["correction_residual_coverage_fraction"])
+        )
+        residual_capture_rates.append(
+            float(full["correction_residual_capture_rate"])
+        )
+        residual_fractions.append(float(full["correction_residual_fraction"]))
         correction_attempts.append(float(full["correction_attempts_used"]))
         second_pass_flags.append(float(full["correction_used_second_pass"]))
         first_pass_recovery_deltas.append(
@@ -609,6 +630,9 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         )
         spillover_recovery_deltas.append(
             float(full["correction_spillover_recovery_delta"])
+        )
+        residual_recovery_deltas.append(
+            float(full["correction_residual_recovery_delta"])
         )
         total_recovery_deltas.append(float(full["correction_total_recovery_delta"]))
         oomphlap_initial_bit_errors.append(
@@ -823,6 +847,27 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["correction_spillover_fraction"]),
                 6,
             ),
+            "correction_residual_polish_applied": int(
+                full["correction_residual_polish_applied"]
+            ),
+            "correction_residual_candidate_count": int(
+                full["correction_residual_candidate_count"]
+            ),
+            "correction_residual_selected_count": int(
+                full["correction_residual_selected_count"]
+            ),
+            "correction_residual_coverage_fraction": round(
+                float(full["correction_residual_coverage_fraction"]),
+                6,
+            ),
+            "correction_residual_capture_rate": round(
+                float(full["correction_residual_capture_rate"]),
+                6,
+            ),
+            "correction_residual_fraction": round(
+                float(full["correction_residual_fraction"]),
+                6,
+            ),
             "correction_first_pass_recovery_delta": round(
                 float(full["correction_first_pass_recovery_delta"]),
                 6,
@@ -837,6 +882,10 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             ),
             "correction_spillover_recovery_delta": round(
                 float(full["correction_spillover_recovery_delta"]),
+                6,
+            ),
+            "correction_residual_recovery_delta": round(
+                float(full["correction_residual_recovery_delta"]),
                 6,
             ),
             "correction_total_recovery_delta": round(
@@ -1108,6 +1157,27 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             bench_metrics.mean(spillover_fractions),
             6,
         ),
+        "residual_polish_usage_rate": round(bench_metrics.mean(residual_usage_flags), 6),
+        "avg_correction_residual_candidate_count": round(
+            bench_metrics.mean(residual_candidate_counts),
+            6,
+        ),
+        "avg_correction_residual_selected_count": round(
+            bench_metrics.mean(residual_selected_counts),
+            6,
+        ),
+        "avg_correction_residual_coverage_fraction": round(
+            bench_metrics.mean(residual_coverage_fractions),
+            6,
+        ),
+        "avg_correction_residual_capture_rate": round(
+            bench_metrics.mean(residual_capture_rates),
+            6,
+        ),
+        "avg_correction_residual_fraction": round(
+            bench_metrics.mean(residual_fractions),
+            6,
+        ),
         "second_pass_usage_rate": round(bench_metrics.mean(second_pass_flags), 6),
         "avg_first_pass_recovery_delta": round(
             bench_metrics.mean(first_pass_recovery_deltas),
@@ -1123,6 +1193,10 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         ),
         "avg_spillover_recovery_delta": round(
             bench_metrics.mean(spillover_recovery_deltas),
+            6,
+        ),
+        "avg_residual_recovery_delta": round(
+            bench_metrics.mean(residual_recovery_deltas),
             6,
         ),
         "avg_total_recovery_delta": round(
