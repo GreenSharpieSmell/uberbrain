@@ -1,0 +1,171 @@
+{
+  "saved_at": "2026-04-13T20:05:18.998955+00:00",
+  "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "spec_version": 0.2,
+  "project": "uberbrain",
+  "run": {
+    "run_id": "${DATE}_${GIT_SHA_SHORT}",
+    "seed": 42,
+    "trials": 20,
+    "confidence_level": 0.95,
+    "output_dir": "results/${DATE}_${GIT_SHA_SHORT}"
+  },
+  "claims": {
+    "c1_sim1_verify": {
+      "enabled": false,
+      "metrics": [
+        "roc_auc",
+        "fnr_at_threshold",
+        "calibration_ece",
+        "ssim_delta"
+      ],
+      "pass_fail": {
+        "roc_auc": {
+          "op": ">=",
+          "value": 0.9
+        },
+        "fnr_at_threshold": {
+          "op": "<=",
+          "value": 0.8,
+          "note": "FNR is threshold-dependent; ROC AUC=1.0 is the primary detection metric. FNR at adaptive midpoint threshold reflects simulation-scale sensitivity. Benchtop experiment will establish empirical detection threshold."
+        },
+        "ssim_vs_mse_auc_delta": {
+          "op": ">=",
+          "value": 0.0
+        }
+      }
+    },
+    "c2_sim2_oomphlap": {
+      "enabled": false,
+      "metrics": [
+        "ber",
+        "state_accuracy",
+        "confusion_matrix",
+        "effective_bits_per_symbol"
+      ],
+      "noise_grid": {
+        "sigma": [
+          0.0,
+          0.01,
+          0.02,
+          0.05,
+          0.08,
+          0.1
+        ],
+        "crosstalk": [
+          0.0,
+          0.01,
+          0.03,
+          0.05
+        ]
+      },
+      "pass_fail": {
+        "ber_at_sigma_0p05": {
+          "op": "<=",
+          "value": 0.01
+        },
+        "state_accuracy_at_sigma_0p05": {
+          "op": ">=",
+          "value": 0.99
+        },
+        "effective_capacity_gain_vs_single_channel": {
+          "op": ">=",
+          "value": 1.25
+        }
+      }
+    },
+    "c3_sim3_consolicant": {
+      "enabled": false,
+      "metrics": [
+        "precision",
+        "recall",
+        "f1",
+        "retained_value_score",
+        "regret"
+      ],
+      "pass_fail": {
+        "f1": {
+          "op": ">=",
+          "value": 0.8
+        },
+        "regret_ratio_vs_age_only": {
+          "op": "<=",
+          "value": 0.6
+        },
+        "retained_value_vs_random": {
+          "op": ">=",
+          "value": 1.1
+        }
+      }
+    },
+    "c4_sim4_pipeline": {
+      "enabled": true,
+      "metrics": [
+        "end_to_end_success_rate",
+        "reliability_uplift_vs_ablation",
+        "runtime_cost"
+      ],
+      "ablations": [
+        "no_verify",
+        "no_correction_write",
+        "no_consolidate_bleach"
+      ],
+      "pass_fail": {
+        "uplift_vs_modeled_ablations": {
+          "op": ">=",
+          "value": 0.0
+        },
+        "min_success_rate": {
+          "op": ">=",
+          "value": 0.9
+        },
+        "all_ablations_modeled": {
+          "op": "==",
+          "value": 1.0
+        }
+      }
+    }
+  },
+  "adversarial_suite": {
+    "enabled": true,
+    "scenarios": {
+      "sim1": [
+        "structured_perturbation_low_global_ssim_change",
+        "phase_jitter_burst",
+        "blur_plus_drop_patch"
+      ],
+      "sim2": [
+        "threshold_drift",
+        "correlated_channel_noise",
+        "single_channel_failure"
+      ],
+      "sim3": [
+        "non_scale_free_graph",
+        "label_shift",
+        "stale_fidelity_adversarial_labels"
+      ],
+      "sim4": [
+        "oomphlap_threshold_drift",
+        "oomphlap_correlated_channel_noise",
+        "oomphlap_single_channel_failure",
+        "cascading_faults",
+        "partial_correction_failure"
+      ]
+    }
+  },
+  "artifacts": {
+    "write_csv": true,
+    "write_json": true,
+    "write_plots": true,
+    "include_environment": true,
+    "required_files": [
+      "config.json",
+      "metrics.csv",
+      "summary.json",
+      "environment.txt"
+    ]
+  },
+  "_resolved_run_id": "20260413_96f30bf",
+  "_resolved_output_dir": "results/20260413_96f30bf"
+}
