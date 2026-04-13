@@ -106,6 +106,9 @@ adversarial_suite:
       - label_shift
       - stale_fidelity_adversarial_labels
     sim4:
+      - oomphlap_threshold_drift
+      - oomphlap_correlated_channel_noise
+      - oomphlap_single_channel_failure
       - cascading_faults
       - partial_correction_failure
 

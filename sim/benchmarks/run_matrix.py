@@ -116,6 +116,142 @@ def restrict_config_to_claim(config: Dict[str, Any], claim_key: str) -> None:
         claim_cfg["enabled"] = claim_id == selected_claim_id
 
 
+def _metric_case_key(name: str) -> str:
+    return name.strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _run_c4_stress_suite(sim4, config: Dict[str, Any], base_seed: int) -> tuple[list[dict], dict]:
+    adv_cfg = config.get("adversarial_suite", {})
+    if not adv_cfg.get("enabled", False):
+        return [], {}
+
+    stress_cases = adv_cfg.get("scenarios", {}).get("sim4", [])
+    if not stress_cases:
+        return [], {}
+
+    run_cfg = config.get("run", {})
+    n_trials = min(run_cfg.get("trials", 200), 50)
+    trials_per_case = min(12, max(4, n_trials // 2))
+    rows: list[dict] = []
+    full_successes = []
+    no_verify_successes = []
+    failure_counts: Dict[str, int] = {}
+    case_successes: Dict[str, list[float]] = {case: [] for case in stress_cases}
+    threshold_drift_flags = []
+    correlated_noise_flags = []
+    cascading_fault_flags = []
+    partial_correction_override_flags = []
+
+    for case_index, case in enumerate(stress_cases):
+        for trial in range(trials_per_case):
+            scenario_seed = base_seed + 50000 + case_index * 1000 + trial
+            scenario = sim4.sample_pipeline_scenario(
+                scenario_seed,
+                profile="stress",
+                stress_case=case,
+            )
+            full = sim4.simulate_pipeline_trial(
+                scenario,
+                enable_verify=True,
+                enable_correction_write=True,
+                enable_consolidate_bleach=True,
+            )
+            no_verify = sim4.simulate_pipeline_trial(
+                scenario,
+                enable_verify=False,
+                enable_correction_write=False,
+                enable_consolidate_bleach=True,
+            )
+
+            full_successes.append(float(full["overall_success"]))
+            no_verify_successes.append(float(no_verify["overall_success"]))
+            case_successes[case].append(float(full["overall_success"]))
+            threshold_drift_flags.append(
+                1.0 if abs(float(full["oomphlap_threshold_drift"])) > 0.0 else 0.0
+            )
+            correlated_noise_flags.append(
+                1.0 if float(full["oomphlap_correlated_noise_sigma"]) > 0.0 else 0.0
+            )
+            cascading_fault_flags.append(1.0 if case == "cascading_faults" else 0.0)
+            partial_correction_override_flags.append(
+                1.0 if case == "partial_correction_failure" else 0.0
+            )
+
+            if full["failure_reason"] != "none":
+                failure_counts[full["failure_reason"]] = (
+                    failure_counts.get(full["failure_reason"], 0) + 1
+                )
+
+            rows.append({
+                "claim": "c4_sim4_pipeline",
+                "trial": trial,
+                "scenario_seed": scenario_seed,
+                "scenario_profile": "stress",
+                "stress_case": case,
+                "pipeline_success": int(full["overall_success"]),
+                "no_verify_success": int(no_verify["overall_success"]),
+                "hologram_mode": scenario["hologram_mode"],
+                "ssim_pipeline": round(float(full["ssim_after"]), 6),
+                "failure_reason_full": full["failure_reason"],
+                "failure_detail_full": full["failure_detail"],
+                "oomphlap_channel_failure": full["oomphlap_channel_failure"],
+                "oomphlap_threshold_drift": round(
+                    float(full["oomphlap_threshold_drift"]),
+                    6,
+                ),
+                "oomphlap_correlated_noise_sigma": round(
+                    float(full["oomphlap_correlated_noise_sigma"]),
+                    6,
+                ),
+                "oomphlap_correlated_noise_rho": round(
+                    float(full["oomphlap_correlated_noise_rho"]),
+                    6,
+                ),
+                "oomphlap_retry_attempted": int(full["oomphlap_retry_attempted"]),
+                "oomphlap_retry_succeeded": int(full["oomphlap_retry_succeeded"]),
+            })
+
+    summary = {
+        "stress_case_count": len(stress_cases),
+        "stress_trials_per_case": trials_per_case,
+        "stress_full_success_rate": round(bench_metrics.mean(full_successes), 6),
+        "stress_pipeline_failure_rate": round(1.0 - bench_metrics.mean(full_successes), 6),
+        "stress_uplift_vs_no_verify": round(
+            bench_metrics.mean(full_successes) - bench_metrics.mean(no_verify_successes),
+            6,
+        ),
+        "stress_failure_count_partial_hologram_correction_failure": int(
+            failure_counts.get("partial_hologram_correction_failure", 0)
+        ),
+        "stress_failure_count_oomphlap_retry_failed": int(
+            failure_counts.get("oomphlap_retry_failed", 0)
+        ),
+        "stress_threshold_drift_usage_rate": round(
+            bench_metrics.mean(threshold_drift_flags),
+            6,
+        ),
+        "stress_correlated_noise_usage_rate": round(
+            bench_metrics.mean(correlated_noise_flags),
+            6,
+        ),
+        "stress_cascading_fault_usage_rate": round(
+            bench_metrics.mean(cascading_fault_flags),
+            6,
+        ),
+        "stress_partial_correction_override_rate": round(
+            bench_metrics.mean(partial_correction_override_flags),
+            6,
+        ),
+    }
+    for case, successes in case_successes.items():
+        summary[f"stress_{_metric_case_key(case)}_success_rate"] = round(
+            bench_metrics.mean(successes),
+            6,
+        )
+
+    return rows, summary
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CLAIM RUNNERS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -715,6 +851,8 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             "claim": "c4_sim4_pipeline",
             "trial": trial,
             "scenario_seed": seed + trial,
+            "scenario_profile": scenario.get("scenario_profile", "standard"),
+            "stress_case": scenario.get("stress_case", "none"),
             "hologram_mode": scenario["hologram_mode"],
             "corrupt_size": scenario["corrupt_size"],
             "pipeline_success": int(full["overall_success"]),
@@ -907,6 +1045,18 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             "correction_best_stage": full["correction_best_stage"],
             "oomphlap_channel_failure": full["oomphlap_channel_failure"],
             "oomphlap_failed_channel": int(full["oomphlap_failed_channel"]),
+            "oomphlap_threshold_drift": round(
+                float(full["oomphlap_threshold_drift"]),
+                6,
+            ),
+            "oomphlap_correlated_noise_sigma": round(
+                float(full["oomphlap_correlated_noise_sigma"]),
+                6,
+            ),
+            "oomphlap_correlated_noise_rho": round(
+                float(full["oomphlap_correlated_noise_rho"]),
+                6,
+            ),
             "oomphlap_initial_bit_error_count": int(
                 full["oomphlap_initial_bit_error_count"]
             ),
@@ -1022,6 +1172,8 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     avg_failed_retry_draw_minus_success_rate = bench_metrics.mean(
         oomphlap_failed_retry_draw_minus_success_rates
     )
+    stress_rows, stress_summary = _run_c4_stress_suite(sim4, config, seed)
+    rows.extend(stress_rows)
 
     rows.append({
         "claim": "c4_sim4_pipeline",
@@ -1354,6 +1506,7 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         "modeled_ablation_count": len(modeled_ablations),
         "declared_ablation_count": len(declared_ablations),
         "all_ablations_modeled": 1.0 if not unmodeled_ablations else 0.0,
+        **stress_summary,
         "n_trials": n_trials,
     })
 

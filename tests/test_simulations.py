@@ -179,8 +179,13 @@ def test_sim4_trial_reports_failure_fields():
     assert "correction_residual_recovery_delta" in result
     assert "correction_total_recovery_delta" in result
     assert "correction_best_stage" in result
+    assert "scenario_profile" in result
+    assert "stress_case" in result
     assert "oomphlap_channel_failure" in result
     assert "oomphlap_failed_channel" in result
+    assert "oomphlap_threshold_drift" in result
+    assert "oomphlap_correlated_noise_sigma" in result
+    assert "oomphlap_correlated_noise_rho" in result
     assert "oomphlap_initial_bit_error_count" in result
     assert "oomphlap_final_bit_error_count" in result
     assert "oomphlap_min_threshold_distance" in result
@@ -260,8 +265,13 @@ def test_sim4_trial_reports_failure_fields():
         "spillover_polish",
         "residual_polish",
     }
+    assert result["scenario_profile"] in {"standard", "stress"}
+    assert isinstance(result["stress_case"], str)
     assert result["oomphlap_channel_failure"] in {"none", "stuck_low", "stuck_high", "random"}
     assert result["oomphlap_failed_channel"] >= -1
+    assert -0.2 <= result["oomphlap_threshold_drift"] <= 0.2
+    assert result["oomphlap_correlated_noise_sigma"] >= 0.0
+    assert 0.0 <= result["oomphlap_correlated_noise_rho"] <= 1.0
     assert result["oomphlap_initial_bit_error_count"] >= 0
     assert result["oomphlap_final_bit_error_count"] >= 0
     assert result["oomphlap_final_bit_error_count"] <= result["oomphlap_initial_bit_error_count"]
@@ -362,6 +372,40 @@ def test_sim4_block_dropout_falls_back_to_diff_geometry_when_missing_mask_collap
     assert damage["missing_count"] < max(4, int(np.ceil(0.05 * damage["diff_count"])))
     assert damage["focus_source"] == "diff_mask"
     assert damage["focus_interior_share"] > 0.0
+
+
+def test_sim4_stress_threshold_drift_scenario_sets_expected_fields():
+    scenario = sim4.sample_pipeline_scenario(42, profile="stress", stress_case="oomphlap_threshold_drift")
+
+    assert scenario["scenario_profile"] == "stress"
+    assert scenario["stress_case"] == "oomphlap_threshold_drift"
+    assert abs(scenario["oomphlap_threshold_drift"]) > 0.0
+    assert scenario["oomphlap_correlated_noise_sigma"] == 0.0
+
+
+def test_sim4_stress_correlated_noise_scenario_sets_expected_fields():
+    scenario = sim4.sample_pipeline_scenario(
+        42,
+        profile="stress",
+        stress_case="oomphlap_correlated_channel_noise",
+    )
+
+    assert scenario["scenario_profile"] == "stress"
+    assert scenario["stress_case"] == "oomphlap_correlated_channel_noise"
+    assert scenario["oomphlap_correlated_noise_sigma"] > 0.0
+    assert scenario["oomphlap_correlated_noise_rho"] > 0.0
+
+
+def test_sim4_stress_single_channel_failure_forces_explicit_failure():
+    scenario = sim4.sample_pipeline_scenario(
+        42,
+        profile="stress",
+        stress_case="oomphlap_single_channel_failure",
+    )
+
+    assert scenario["scenario_profile"] == "stress"
+    assert scenario["stress_case"] == "oomphlap_single_channel_failure"
+    assert scenario["oomphlap_channel_failure"] in {"stuck_low", "stuck_high", "random"}
 
 
 def test_sim4_oomphlap_retry_telemetry_reports_forced_failure():

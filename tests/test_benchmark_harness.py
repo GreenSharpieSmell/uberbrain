@@ -464,6 +464,8 @@ class TestRunMatrixClaimRigor:
         assert "block_dropout_threshold_crossing_rate" in summary
         assert "failure_count_multi_stage" in summary
         assert "uplift_vs_no_consolidate_bleach" in summary
+        assert "scenario_profile" in trial_row
+        assert "stress_case" in trial_row
         assert "failure_detail_full" in trial_row
         assert "hologram_diff_count" in trial_row
         assert "hologram_missing_count" in trial_row
@@ -511,6 +513,9 @@ class TestRunMatrixClaimRigor:
         assert "correction_best_stage" in trial_row
         assert "oomphlap_channel_failure" in trial_row
         assert "oomphlap_failed_channel" in trial_row
+        assert "oomphlap_threshold_drift" in trial_row
+        assert "oomphlap_correlated_noise_sigma" in trial_row
+        assert "oomphlap_correlated_noise_rho" in trial_row
         assert "oomphlap_initial_bit_error_count" in trial_row
         assert "oomphlap_final_bit_error_count" in trial_row
         assert "oomphlap_min_threshold_distance" in trial_row
@@ -531,3 +536,46 @@ class TestRunMatrixClaimRigor:
         assert 0.0 <= summary["focus_source_missing_rate"] <= 1.0
         assert 0.0 <= summary["oomphlap_retry_success_rate_given_attempt"] <= 1.0
         assert 0.0 <= summary["avg_oomphlap_retry_targeted_success_rate"] <= 0.995
+
+    def test_c4_stress_suite_reports_named_adversarial_metrics(self):
+        run_matrix = _load_run_matrix()
+        rows = run_matrix.run_claim_c4({
+            "run": {"seed": 42, "trials": 8},
+            "adversarial_suite": {
+                "enabled": True,
+                "scenarios": {
+                    "sim4": [
+                        "oomphlap_threshold_drift",
+                        "oomphlap_correlated_channel_noise",
+                        "oomphlap_single_channel_failure",
+                        "cascading_faults",
+                        "partial_correction_failure",
+                    ]
+                },
+            },
+        })
+        summary = rows[-1]
+        stress_rows = [
+            row
+            for row in rows[:-1]
+            if row.get("scenario_profile") == "stress"
+        ]
+
+        assert summary["stress_case_count"] == 5
+        assert summary["stress_trials_per_case"] >= 4
+        assert "stress_full_success_rate" in summary
+        assert "stress_pipeline_failure_rate" in summary
+        assert "stress_uplift_vs_no_verify" in summary
+        assert "stress_failure_count_partial_hologram_correction_failure" in summary
+        assert "stress_failure_count_oomphlap_retry_failed" in summary
+        assert "stress_threshold_drift_usage_rate" in summary
+        assert "stress_correlated_noise_usage_rate" in summary
+        assert "stress_cascading_fault_usage_rate" in summary
+        assert "stress_partial_correction_override_rate" in summary
+        assert "stress_oomphlap_threshold_drift_success_rate" in summary
+        assert "stress_oomphlap_correlated_channel_noise_success_rate" in summary
+        assert "stress_oomphlap_single_channel_failure_success_rate" in summary
+        assert "stress_cascading_faults_success_rate" in summary
+        assert "stress_partial_correction_failure_success_rate" in summary
+        assert stress_rows
+        assert all(row["stress_case"] != "none" for row in stress_rows)

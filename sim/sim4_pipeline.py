@@ -226,7 +226,7 @@ def normalize_field(field):
     return (field - lo) / (hi - lo)
 
 
-def sample_pipeline_scenario(seed):
+def sample_pipeline_scenario(seed, profile="standard", stress_case="none"):
     """
     Build one deterministic hostile scenario that can be replayed across ablations.
 
@@ -240,8 +240,10 @@ def sample_pipeline_scenario(seed):
     channel_failure = ["none", "stuck_low", "stuck_high", "random"][
         int(rng.integers(0, 4))
     ]
-    return {
+    scenario = {
         "seed": seed,
+        "scenario_profile": profile,
+        "stress_case": stress_case,
         "grid_size": GRID_SIZE,
         "corrupt_size": int(rng.integers(18, 52)),
         "corrupt_x": int(rng.integers(8, GRID_SIZE - 60)),
@@ -258,6 +260,9 @@ def sample_pipeline_scenario(seed):
         "oomphlap_verify_margin": float(rng.uniform(0.03, 0.08)),
         "oomphlap_channel_failure": channel_failure,
         "oomphlap_retry_success_rate": float(rng.uniform(0.45, 0.85)),
+        "oomphlap_threshold_drift": 0.0,
+        "oomphlap_correlated_noise_sigma": 0.0,
+        "oomphlap_correlated_noise_rho": 0.0,
         "graph_cycles": int(rng.integers(2, 6)),
         "graph_degrade_fraction": float(rng.uniform(0.10, 0.24)),
         "graph_fidelity_drop": float(rng.uniform(0.05, 0.16)),
@@ -265,7 +270,55 @@ def sample_pipeline_scenario(seed):
         "graph_adversarial_hubs": int(rng.integers(6, 18)),
         "graph_remaining_critical_limit": float(rng.uniform(0.03, 0.08)),
         "graph_repair_backlog_limit": float(rng.uniform(0.18, 0.30)),
+        "cascading_fault_rate": 0.0,
+        "partial_correction_success_rate_override": None,
     }
+    if profile != "stress":
+        return scenario
+
+    scenario["oomphlap_sigma"] = float(rng.uniform(0.03, 0.12))
+    scenario["oomphlap_crosstalk"] = float(rng.uniform(0.05, 0.18))
+    scenario["oomphlap_verify_margin"] = float(rng.uniform(0.04, 0.10))
+    scenario["oomphlap_retry_success_rate"] = float(rng.uniform(0.35, 0.78))
+    scenario["residual_noise_sigma"] = float(rng.uniform(0.01, 0.04))
+    scenario["graph_cycles"] = int(rng.integers(3, 7))
+    scenario["graph_degrade_fraction"] = float(rng.uniform(0.14, 0.30))
+    scenario["graph_fidelity_drop"] = float(rng.uniform(0.08, 0.20))
+    scenario["graph_stale_increment"] = float(rng.uniform(12.0, 24.0))
+
+    if stress_case == "oomphlap_threshold_drift":
+        drift_sign = -1.0 if int(rng.integers(0, 2)) == 0 else 1.0
+        scenario["oomphlap_threshold_drift"] = float(
+            drift_sign * rng.uniform(0.04, 0.10)
+        )
+    elif stress_case == "oomphlap_correlated_channel_noise":
+        scenario["oomphlap_correlated_noise_sigma"] = float(rng.uniform(0.04, 0.09))
+        scenario["oomphlap_correlated_noise_rho"] = float(rng.uniform(0.75, 0.95))
+    elif stress_case == "oomphlap_single_channel_failure":
+        scenario["oomphlap_channel_failure"] = [
+            "stuck_low",
+            "stuck_high",
+            "random",
+        ][int(rng.integers(0, 3))]
+        scenario["oomphlap_retry_success_rate"] = float(rng.uniform(0.30, 0.70))
+    elif stress_case == "cascading_faults":
+        scenario["oomphlap_correlated_noise_sigma"] = float(rng.uniform(0.03, 0.08))
+        scenario["oomphlap_correlated_noise_rho"] = float(rng.uniform(0.65, 0.90))
+        scenario["oomphlap_channel_failure"] = [
+            "stuck_low",
+            "stuck_high",
+            "random",
+        ][int(rng.integers(0, 3))]
+        scenario["cascading_fault_rate"] = float(rng.uniform(0.35, 0.75))
+        scenario["partial_correction_success_rate_override"] = float(
+            rng.uniform(0.30, 0.65)
+        )
+    elif stress_case == "partial_correction_failure":
+        scenario["partial_correction_success_rate_override"] = float(
+            rng.uniform(0.20, 0.60)
+        )
+
+    return scenario
 
 
 def _mix_channels(values, crosstalk):
@@ -280,6 +333,20 @@ def _mix_channels(values, crosstalk):
             bleed += values[j] * (crosstalk / (n_ch - 1))
         mixed.append(retained + bleed)
     return mixed
+
+
+def _apply_correlated_oomphlap_noise(noisy_levels, sigma, rho, rng):
+    if sigma <= 0.0:
+        return list(noisy_levels)
+
+    rho = float(np.clip(rho, 0.0, 0.999))
+    common = float(rng.normal(0.0, sigma))
+    indep_sigma = sigma * np.sqrt(max(0.0, 1.0 - rho ** 2))
+    indep = rng.normal(0.0, indep_sigma, len(noisy_levels))
+    return [
+        float(np.clip(level + rho * common + indep[idx], 0.0, 1.0))
+        for idx, level in enumerate(noisy_levels)
+    ]
 
 
 def _derive_oomphlap_retry_plan(
@@ -405,6 +472,20 @@ def _decode_oomphlap(bits, scenario, enable_verify, enable_correction_write):
         float(np.clip(x + rng.normal(0, scenario["oomphlap_sigma"]), 0.0, 1.0))
         for x in mixed_levels
     ]
+    correlated_noise_sigma = float(scenario.get("oomphlap_correlated_noise_sigma", 0.0))
+    correlated_noise_rho = float(scenario.get("oomphlap_correlated_noise_rho", 0.0))
+    noisy_levels = _apply_correlated_oomphlap_noise(
+        noisy_levels,
+        correlated_noise_sigma,
+        correlated_noise_rho,
+        rng,
+    )
+    threshold_drift = float(scenario.get("oomphlap_threshold_drift", 0.0))
+    if abs(threshold_drift) > 0.0:
+        noisy_levels = [
+            float(np.clip(level + threshold_drift, 0.0, 1.0))
+            for level in noisy_levels
+        ]
 
     failure_mode = scenario["oomphlap_channel_failure"]
     if failure_mode != "none":
@@ -489,6 +570,9 @@ def _decode_oomphlap(bits, scenario, enable_verify, enable_correction_write):
         "final_bits": final_bits,
         "channel_failure": failure_mode,
         "failed_channel": failed_channel,
+        "threshold_drift": threshold_drift,
+        "correlated_noise_sigma": correlated_noise_sigma,
+        "correlated_noise_rho": correlated_noise_rho,
         "initial_bit_error_count": initial_bit_error_count,
         "final_bit_error_count": final_bit_error_count,
         "min_threshold_distance": min_threshold_distance,
@@ -516,16 +600,16 @@ def _decode_oomphlap(bits, scenario, enable_verify, enable_correction_write):
 def _apply_hologram_perturbation(holo_clean, scenario):
     rng = np.random.default_rng(scenario["seed"] + 3001)
     mode = scenario["hologram_mode"]
+    cascading_fault_rate = float(scenario.get("cascading_fault_rate", 0.0))
     if mode == "block_dropout":
-        return corrupt_hologram(
+        perturbed = corrupt_hologram(
             holo_clean,
             scenario["corrupt_x"],
             scenario["corrupt_y"],
             scenario["corrupt_size"],
             scenario["corrupt_size"],
         )
-
-    if mode == "distributed_dropout":
+    elif mode == "distributed_dropout":
         perturbed = holo_clean.copy()
         patch = max(3, scenario["corrupt_size"] // 8)
         stride = scenario["distributed_stride"]
@@ -533,12 +617,18 @@ def _apply_hologram_perturbation(holo_clean, scenario):
             for x in range(0, holo_clean.shape[1] - patch, stride):
                 if rng.random() < 0.55:
                     perturbed[y:y+patch, x:x+patch] = 0.0
-        return perturbed
+    else:
+        noise = rng.normal(0.0, scenario["phase_sigma"], holo_clean.shape)
+        phase_field = np.exp(1j * noise)
+        perturbed = np.real(holo_clean.astype(complex) * phase_field)
+        perturbed = np.clip(normalize_field(perturbed), 0.0, 1.0)
 
-    noise = rng.normal(0.0, scenario["phase_sigma"], holo_clean.shape)
-    phase_field = np.exp(1j * noise)
-    perturbed = np.real(holo_clean.astype(complex) * phase_field)
-    return np.clip(normalize_field(perturbed), 0.0, 1.0)
+    if cascading_fault_rate > 0.0:
+        cascade_sigma = 0.015 + 0.08 * cascading_fault_rate
+        cascade_noise = rng.normal(0.0, cascade_sigma, holo_clean.shape)
+        perturbed = np.clip(perturbed + cascade_noise, 0.0, 1.0)
+        perturbed = normalize_field(perturbed)
+    return perturbed
 
 
 def _measure_damage_geometry(mask):
@@ -727,10 +817,16 @@ def _measure_hologram_damage(holo_clean, holo_corrupt, scenario):
 
 
 def _derive_correction_rates(scenario, damage_profile):
-    base_rate = scenario["correction_success_rate"]
+    override_rate = scenario.get("partial_correction_success_rate_override")
+    base_rate = (
+        float(override_rate)
+        if override_rate is not None
+        else float(scenario["correction_success_rate"])
+    )
+    cascading_penalty = 1.0 - 0.25 * float(scenario.get("cascading_fault_rate", 0.0))
     severity_penalty = 1.0 - (0.65 * damage_profile["severity_score"])
     first_pass_rate = float(np.clip(
-        base_rate * damage_profile["mode_multiplier"] * severity_penalty,
+        base_rate * damage_profile["mode_multiplier"] * severity_penalty * cascading_penalty,
         0.05,
         0.98,
     ))
@@ -742,7 +838,11 @@ def _derive_correction_rates(scenario, damage_profile):
     ))
     first_pass_noise = float(
         scenario["residual_noise_sigma"]
-        * (1.0 + damage_profile["noise_scale"] * damage_profile["severity_score"])
+        * (
+            1.0
+            + damage_profile["noise_scale"] * damage_profile["severity_score"]
+            + 1.2 * float(scenario.get("cascading_fault_rate", 0.0))
+        )
     )
     second_pass_noise = first_pass_noise * 0.60
     focus_strength = float(
@@ -1607,6 +1707,8 @@ def simulate_pipeline_trial(
         )
 
     return {
+        "scenario_profile": scenario.get("scenario_profile", "standard"),
+        "stress_case": scenario.get("stress_case", "none"),
         "hologram_mode": scenario["hologram_mode"],
         "ssim_before": float(score_before),
         "ssim_after": float(score_after),
@@ -1755,6 +1857,13 @@ def simulate_pipeline_trial(
         "oomphlap_channel_failure": oomphlap_result["channel_failure"],
         "oomphlap_failed_channel": (
             -1 if oomphlap_result["failed_channel"] is None else int(oomphlap_result["failed_channel"])
+        ),
+        "oomphlap_threshold_drift": float(oomphlap_result["threshold_drift"]),
+        "oomphlap_correlated_noise_sigma": float(
+            oomphlap_result["correlated_noise_sigma"]
+        ),
+        "oomphlap_correlated_noise_rho": float(
+            oomphlap_result["correlated_noise_rho"]
         ),
         "oomphlap_initial_bit_error_count": int(
             oomphlap_result["initial_bit_error_count"]
