@@ -405,14 +405,21 @@ class TestRunMatrixClaimRigor:
         assert "avg_hologram_severity_score" in summary
         assert "avg_hologram_geometry_score" in summary
         assert "avg_hologram_largest_cluster_share" in summary
+        assert "threshold_crossing_recovery_rate" in summary
+        assert "avg_rewrite_recovery_delta" in summary
         assert "avg_total_recovery_delta" in summary
         assert "block_dropout_success_rate" in summary
+        assert "block_dropout_threshold_crossing_rate" in summary
         assert "failure_count_multi_stage" in summary
         assert "uplift_vs_no_consolidate_bleach" in summary
         assert "failure_detail_full" in trial_row
         assert "hologram_severity_score" in trial_row
         assert "hologram_geometry_score" in trial_row
+        assert "hologram_threshold_crossed_after_recovery" in trial_row
         assert "hologram_largest_cluster_share" in trial_row
         assert "correction_attempts_used" in trial_row
         assert "correction_focus_strength" in trial_row
+        assert "correction_rewrite_applied" in trial_row
+        assert "correction_rewrite_coverage_fraction" in trial_row
+        assert "correction_rewrite_recovery_delta" in trial_row
         assert "correction_total_recovery_delta" in trial_row

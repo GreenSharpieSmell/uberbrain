@@ -419,16 +419,21 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     largest_cluster_bbox_fractions = []
     largest_cluster_fill_ratios = []
     focus_strengths = []
+    rewrite_fractions = []
+    rewrite_usage_flags = []
+    rewrite_coverage_fractions = []
     correction_attempts = []
     second_pass_flags = []
     first_pass_recovery_deltas = []
+    rewrite_recovery_deltas = []
     second_pass_recovery_deltas = []
     total_recovery_deltas = []
     mode_metrics: Dict[str, Dict[str, list[float]]] = {
-        "block_dropout": {"successes": [], "recovery_deltas": []},
-        "distributed_dropout": {"successes": [], "recovery_deltas": []},
-        "phase_noise": {"successes": [], "recovery_deltas": []},
+        "block_dropout": {"successes": [], "recovery_deltas": [], "threshold_crossings": []},
+        "distributed_dropout": {"successes": [], "recovery_deltas": [], "threshold_crossings": []},
+        "phase_noise": {"successes": [], "recovery_deltas": [], "threshold_crossings": []},
     }
+    threshold_crossings = []
 
     for trial in range(n_trials):
         scenario = sim4.sample_pipeline_scenario(seed + trial)
@@ -474,19 +479,31 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             float(full["hologram_largest_cluster_fill_ratio"])
         )
         focus_strengths.append(float(full["correction_focus_strength"]))
+        rewrite_fractions.append(float(full["correction_rewrite_fraction"]))
+        rewrite_usage_flags.append(float(full["correction_rewrite_applied"]))
+        rewrite_coverage_fractions.append(
+            float(full["correction_rewrite_coverage_fraction"])
+        )
         correction_attempts.append(float(full["correction_attempts_used"]))
         second_pass_flags.append(float(full["correction_used_second_pass"]))
         first_pass_recovery_deltas.append(
             float(full["correction_first_pass_recovery_delta"])
         )
+        rewrite_recovery_deltas.append(
+            float(full["correction_rewrite_recovery_delta"])
+        )
         second_pass_recovery_deltas.append(
             float(full["correction_second_pass_recovery_delta"])
         )
         total_recovery_deltas.append(float(full["correction_total_recovery_delta"]))
+        threshold_crossings.append(float(full["hologram_threshold_crossed_after_recovery"]))
         mode_bucket = mode_metrics[scenario["hologram_mode"]]
         mode_bucket["successes"].append(float(full["overall_success"]))
         mode_bucket["recovery_deltas"].append(
             float(full["correction_total_recovery_delta"])
+        )
+        mode_bucket["threshold_crossings"].append(
+            float(full["hologram_threshold_crossed_after_recovery"])
         )
 
         if full["failure_reason"] != "none":
@@ -540,14 +557,30 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["hologram_largest_cluster_fill_ratio"]),
                 6,
             ),
+            "hologram_threshold_crossed_after_recovery": int(
+                full["hologram_threshold_crossed_after_recovery"]
+            ),
             "correction_attempts_used": int(full["correction_attempts_used"]),
             "correction_used_second_pass": int(full["correction_used_second_pass"]),
             "correction_focus_strength": round(
                 float(full["correction_focus_strength"]),
                 6,
             ),
+            "correction_rewrite_fraction": round(
+                float(full["correction_rewrite_fraction"]),
+                6,
+            ),
+            "correction_rewrite_applied": int(full["correction_rewrite_applied"]),
+            "correction_rewrite_coverage_fraction": round(
+                float(full["correction_rewrite_coverage_fraction"]),
+                6,
+            ),
             "correction_first_pass_recovery_delta": round(
                 float(full["correction_first_pass_recovery_delta"]),
+                6,
+            ),
+            "correction_rewrite_recovery_delta": round(
+                float(full["correction_rewrite_recovery_delta"]),
                 6,
             ),
             "correction_second_pass_recovery_delta": round(
@@ -612,6 +645,15 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     phase_recovery_delta = bench_metrics.mean(
         mode_metrics["phase_noise"]["recovery_deltas"]
     )
+    block_threshold_crossing_rate = bench_metrics.mean(
+        mode_metrics["block_dropout"]["threshold_crossings"]
+    )
+    distributed_threshold_crossing_rate = bench_metrics.mean(
+        mode_metrics["distributed_dropout"]["threshold_crossings"]
+    )
+    phase_threshold_crossing_rate = bench_metrics.mean(
+        mode_metrics["phase_noise"]["threshold_crossings"]
+    )
 
     rows.append({
         "claim": "c4_sim4_pipeline",
@@ -659,9 +701,22 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             6,
         ),
         "avg_correction_focus_strength": round(bench_metrics.mean(focus_strengths), 6),
+        "avg_correction_rewrite_fraction": round(
+            bench_metrics.mean(rewrite_fractions),
+            6,
+        ),
+        "rewrite_usage_rate": round(bench_metrics.mean(rewrite_usage_flags), 6),
+        "avg_correction_rewrite_coverage_fraction": round(
+            bench_metrics.mean(rewrite_coverage_fractions),
+            6,
+        ),
         "second_pass_usage_rate": round(bench_metrics.mean(second_pass_flags), 6),
         "avg_first_pass_recovery_delta": round(
             bench_metrics.mean(first_pass_recovery_deltas),
+            6,
+        ),
+        "avg_rewrite_recovery_delta": round(
+            bench_metrics.mean(rewrite_recovery_deltas),
             6,
         ),
         "avg_second_pass_recovery_delta": round(
@@ -672,12 +727,28 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             bench_metrics.mean(total_recovery_deltas),
             6,
         ),
+        "threshold_crossing_recovery_rate": round(
+            bench_metrics.mean(threshold_crossings),
+            6,
+        ),
         "block_dropout_success_rate": round(block_success_rate, 6),
         "distributed_dropout_success_rate": round(distributed_success_rate, 6),
         "phase_noise_success_rate": round(phase_success_rate, 6),
         "block_dropout_recovery_delta": round(block_recovery_delta, 6),
         "distributed_dropout_recovery_delta": round(distributed_recovery_delta, 6),
         "phase_noise_recovery_delta": round(phase_recovery_delta, 6),
+        "block_dropout_threshold_crossing_rate": round(
+            block_threshold_crossing_rate,
+            6,
+        ),
+        "distributed_dropout_threshold_crossing_rate": round(
+            distributed_threshold_crossing_rate,
+            6,
+        ),
+        "phase_noise_threshold_crossing_rate": round(
+            phase_threshold_crossing_rate,
+            6,
+        ),
         "failure_count_multi_stage": int(
             failure_counts.get("multi_stage_failure", 0)
         ),

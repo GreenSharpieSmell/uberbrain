@@ -138,8 +138,12 @@ def test_sim4_trial_reports_failure_fields():
     assert "hologram_geometry_score" in result
     assert "hologram_damage_cluster_count" in result
     assert "hologram_largest_cluster_share" in result
+    assert "hologram_threshold_crossed_after_recovery" in result
     assert "correction_attempts_used" in result
     assert "correction_focus_strength" in result
+    assert "correction_rewrite_applied" in result
+    assert "correction_rewrite_coverage_fraction" in result
+    assert "correction_rewrite_recovery_delta" in result
     assert "correction_total_recovery_delta" in result
     assert result["failure_reason"]
     assert result["failure_detail"]
@@ -149,8 +153,12 @@ def test_sim4_trial_reports_failure_fields():
     assert result["hologram_geometry_score"] >= 0.0
     assert result["hologram_damage_cluster_count"] >= 0
     assert 0.0 <= result["hologram_largest_cluster_share"] <= 1.0
+    assert result["hologram_threshold_crossed_after_recovery"] in {0, 1}
     assert result["correction_attempts_used"] <= result["correction_attempts_planned"]
     assert result["correction_focus_strength"] >= 0.0
+    assert result["correction_rewrite_applied"] in {0, 1}
+    assert result["correction_rewrite_coverage_fraction"] >= 0.0
+    assert result["correction_rewrite_recovery_delta"] >= 0.0
     assert result["correction_total_recovery_delta"] >= 0.0
 
 
@@ -173,7 +181,31 @@ def test_sim4_correction_path_never_lowers_best_hologram_score():
 
     assert result["ssim_after"] >= result["ssim_before"] - 1e-9
     assert result["correction_total_recovery_delta"] >= 0.0
+    assert result["correction_rewrite_recovery_delta"] >= 0.0
     assert result["correction_second_pass_recovery_delta"] >= 0.0
+
+
+def test_sim4_block_dropout_uses_contiguous_rewrite_when_repair_is_triggered():
+    scenario = sim4.sample_pipeline_scenario(42)
+    scenario.update({
+        "hologram_mode": "block_dropout",
+        "corrupt_size": 46,
+        "corrupt_x": 18,
+        "corrupt_y": 18,
+        "max_correction_passes": 2,
+    })
+
+    result = sim4.simulate_pipeline_trial(
+        scenario,
+        enable_verify=True,
+        enable_correction_write=True,
+        enable_consolidate_bleach=True,
+    )
+
+    assert result["ssim_before"] < sim4.FIDELITY_WARN
+    assert result["correction_rewrite_applied"] == 1
+    assert result["correction_rewrite_coverage_fraction"] > 0.0
+    assert result["correction_rewrite_recovery_delta"] >= 0.0
 
 
 def test_sim4_block_dropout_geometry_is_more_clustered_than_distributed_dropout():

@@ -527,6 +527,14 @@ def _derive_correction_rates(scenario, damage_profile):
         "first_pass_noise": first_pass_noise,
         "second_pass_noise": second_pass_noise,
         "focus_strength": focus_strength,
+        "rewrite_fraction": float(
+            np.clip(
+                0.10
+                + 0.70 * focus_strength * (0.45 + 0.55 * damage_profile["geometry_score"]),
+                0.0,
+                0.85,
+            )
+        ),
         "first_pass_focus_bonus": float(
             damage_profile["first_pass_focus_bonus"] * focus_strength
         ),
@@ -580,6 +588,28 @@ def _build_region_repair_probability_map(
     return np.clip(probability_map, 0.0, 0.98)
 
 
+def _apply_contiguous_region_rewrite(holo_clean, hologram, damage_profile, rewrite_fraction):
+    focus_mask = damage_profile["focus_mask"]
+    diff_mask = np.abs(holo_clean - hologram) > 1e-6
+    rewrite_candidates = focus_mask & diff_mask
+    if not np.any(rewrite_candidates) or rewrite_fraction <= 0.0:
+        return hologram.copy(), 0.0
+
+    depth = damage_profile["focus_depth_normalized"][rewrite_candidates]
+    quantile = float(np.clip(1.0 - rewrite_fraction, 0.0, 1.0))
+    depth_cutoff = float(np.quantile(depth, quantile))
+    rewrite_mask = rewrite_candidates & (
+        damage_profile["focus_depth_normalized"] >= depth_cutoff - 1e-12
+    )
+    if not np.any(rewrite_mask):
+        rewrite_mask = rewrite_candidates
+
+    corrected = hologram.copy()
+    corrected[rewrite_mask] = holo_clean[rewrite_mask]
+    rewrite_coverage = float(np.count_nonzero(rewrite_mask) / max(1, np.count_nonzero(diff_mask)))
+    return corrected, rewrite_coverage
+
+
 def _apply_hologram_correction_pass(
     holo_clean,
     hologram,
@@ -624,6 +654,9 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
     best_score = float(score_before)
     attempts_used = 0
     used_second_pass = False
+    rewrite_applied = False
+    rewrite_coverage = 0.0
+    rewrite_score = float(score_before)
     first_pass_score = float(score_before)
     second_pass_score = float(score_before)
 
@@ -643,6 +676,19 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
     if first_pass_score >= best_score:
         best_hologram = first_candidate
         best_score = float(first_pass_score)
+
+    if best_score < FIDELITY_WARN and rates["rewrite_fraction"] > 0.0:
+        rewrite_candidate, rewrite_coverage = _apply_contiguous_region_rewrite(
+            holo_clean,
+            best_hologram,
+            damage_profile,
+            rates["rewrite_fraction"],
+        )
+        rewrite_score, _, _ = verify_fidelity(rec_clean, reconstruct(rewrite_candidate))
+        rewrite_applied = True
+        if rewrite_score >= best_score:
+            best_hologram = rewrite_candidate
+            best_score = float(rewrite_score)
 
     if attempts_planned > 1 and best_score < FIDELITY_WARN:
         second_candidate = _apply_hologram_correction_pass(
@@ -681,15 +727,26 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         "largest_cluster_fill_ratio": damage_profile["largest_cluster_fill_ratio"],
         "geometry_score": damage_profile["geometry_score"],
         "focus_strength": rates["focus_strength"],
+        "rewrite_fraction": rates["rewrite_fraction"],
+        "rewrite_applied": rewrite_applied,
+        "rewrite_coverage_fraction": rewrite_coverage,
         "first_pass_score": float(first_pass_score),
+        "rewrite_score": float(rewrite_score),
         "second_pass_score": float(second_pass_score),
         "final_score": float(best_score),
         "first_pass_recovery_delta": max(0.0, float(first_pass_score - score_before)),
+        "rewrite_recovery_delta": max(
+            0.0,
+            float(rewrite_score - max(score_before, first_pass_score)),
+        ),
         "second_pass_recovery_delta": max(
             0.0,
-            float(best_score - max(score_before, first_pass_score)),
+            float(best_score - max(score_before, first_pass_score, rewrite_score)),
         ),
         "total_recovery_delta": max(0.0, float(best_score - score_before)),
+        "threshold_crossed_after_recovery": int(
+            score_before < FIDELITY_WARN and best_score >= FIDELITY_WARN
+        ),
     }
 
 
@@ -842,12 +899,18 @@ def simulate_pipeline_trial(
         "largest_cluster_fill_ratio": damage_profile["largest_cluster_fill_ratio"],
         "geometry_score": damage_profile["geometry_score"],
         "focus_strength": correction_rates["focus_strength"],
+        "rewrite_fraction": correction_rates["rewrite_fraction"],
+        "rewrite_applied": False,
+        "rewrite_coverage_fraction": 0.0,
         "first_pass_score": float(score_before),
+        "rewrite_score": float(score_before),
         "second_pass_score": float(score_before),
         "final_score": float(score_before),
         "first_pass_recovery_delta": 0.0,
+        "rewrite_recovery_delta": 0.0,
         "second_pass_recovery_delta": 0.0,
         "total_recovery_delta": 0.0,
+        "threshold_crossed_after_recovery": 0,
     }
 
     if enable_verify and not intact_before and enable_correction_write:
@@ -925,19 +988,31 @@ def simulate_pipeline_trial(
         "hologram_largest_cluster_fill_ratio": float(
             correction_meta["largest_cluster_fill_ratio"]
         ),
+        "hologram_threshold_crossed_after_recovery": int(
+            correction_meta["threshold_crossed_after_recovery"]
+        ),
         "correction_attempts_planned": int(correction_meta["attempts_planned"]),
         "correction_attempts_used": int(correction_meta["attempts_used"]),
         "correction_used_second_pass": int(correction_meta["used_second_pass"]),
         "correction_focus_strength": float(correction_meta["focus_strength"]),
+        "correction_rewrite_fraction": float(correction_meta["rewrite_fraction"]),
+        "correction_rewrite_applied": int(correction_meta["rewrite_applied"]),
+        "correction_rewrite_coverage_fraction": float(
+            correction_meta["rewrite_coverage_fraction"]
+        ),
         "correction_first_pass_rate": float(correction_meta["first_pass_rate"]),
         "correction_second_pass_rate": float(correction_meta["second_pass_rate"]),
         "correction_first_pass_score": float(correction_meta["first_pass_score"]),
+        "correction_rewrite_score": float(correction_meta["rewrite_score"]),
         "correction_second_pass_score": float(correction_meta["second_pass_score"]),
         "correction_total_recovery_delta": float(
             correction_meta["total_recovery_delta"]
         ),
         "correction_first_pass_recovery_delta": float(
             correction_meta["first_pass_recovery_delta"]
+        ),
+        "correction_rewrite_recovery_delta": float(
+            correction_meta["rewrite_recovery_delta"]
         ),
         "correction_second_pass_recovery_delta": float(
             correction_meta["second_pass_recovery_delta"]
