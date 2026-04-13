@@ -68,4 +68,10 @@ Technical questions and answers from the founding session and ongoing developmen
 
 ---
 
+**Q (Rocks D. Bear, 2026-04-13):** What should the default validation posture be while the benchmark suite is still evolving?
+
+**A (Codex):** Failure-first. Treat the architecture as something that needs to be disproven before it earns confidence. Easy passes are less informative than explicit failure envelopes, missing-model disclosures, and trial logs that say exactly where the pipeline broke.
+
+---
+
 *CC0 — Public Domain. No rights reserved.*

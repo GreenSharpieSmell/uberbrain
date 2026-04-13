@@ -1,0 +1,56 @@
+{
+  "run_id": "20260413_3cc8f78",
+  "git_sha": "3cc8f78",
+  "claims": {
+    "c4_sim4_pipeline": {
+      "metrics": {
+        "full_success_rate": 0.55,
+        "no_verify_success_rate": 0.45,
+        "no_correction_write_success_rate": 0.45,
+        "no_consolidate_bleach_success_rate": 0.0,
+        "uplift_vs_modeled_ablations": 0.1,
+        "uplift_vs_no_verify": 0.1,
+        "uplift_vs_no_correction_write": 0.1,
+        "uplift_vs_no_consolidate_bleach": 0.55,
+        "min_success_rate": 0.55,
+        "pipeline_failure_rate": 0.45,
+        "failure_count_multi_stage": 1,
+        "failure_count_verify_missed_hologram": 0,
+        "failure_count_partial_hologram_correction_failure": 5,
+        "failure_count_verify_missed_oomphlap": 0,
+        "failure_count_oomphlap_retry_failed": 3,
+        "failure_count_critical_node_backlog": 0,
+        "failure_count_repair_backlog": 0,
+        "modeled_ablation_count": 3,
+        "declared_ablation_count": 3,
+        "all_ablations_modeled": 1.0,
+        "n_trials": 20
+      },
+      "gates": {
+        "uplift_vs_modeled_ablations": {
+          "status": "PASS",
+          "reason": "0.100000 >= 0.0 \u2192 PASS",
+          "measured": 0.1,
+          "threshold": 0.0,
+          "op": ">="
+        },
+        "min_success_rate": {
+          "status": "FAIL",
+          "reason": "0.550000 >= 0.9 \u2192 FAIL",
+          "measured": 0.55,
+          "threshold": 0.9,
+          "op": ">="
+        },
+        "all_ablations_modeled": {
+          "status": "PASS",
+          "reason": "1.000000 == 1.0 \u2192 PASS",
+          "measured": 1.0,
+          "threshold": 1.0,
+          "op": "=="
+        }
+      },
+      "status": "FAIL"
+    }
+  },
+  "overall_status": "FAIL"
+}

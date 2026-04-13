@@ -21,6 +21,11 @@ Core rule:
 
 No single-run "hero result" is considered proof.
 
+Default posture:
+- Treat the architecture as guilty until validated.
+- Prefer finding the boundary where it fails over collecting easy passes.
+- Record failure cases as first-class outputs, not embarrassing leftovers.
+
 See `CLAIMS.md` for the claim registry mapping each claim to its current evidence level.
 
 ---

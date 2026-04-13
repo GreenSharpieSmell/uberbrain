@@ -216,6 +216,367 @@ def consolidate(G):
     return bleach, repair, protect
 
 
+def normalize_field(field):
+    field = np.asarray(field, dtype=float)
+    lo = float(field.min())
+    hi = float(field.max())
+    if hi - lo < 1e-12:
+        return np.zeros_like(field)
+    return (field - lo) / (hi - lo)
+
+
+def sample_pipeline_scenario(seed):
+    """
+    Build one deterministic hostile scenario that can be replayed across ablations.
+
+    The benchmark uses the same scenario for the full pipeline and each ablation so
+    any difference is caused by the disabled command, not by a different random draw.
+    """
+    rng = np.random.default_rng(seed)
+    hologram_mode = ["block_dropout", "distributed_dropout", "phase_noise"][
+        int(rng.integers(0, 3))
+    ]
+    channel_failure = ["none", "stuck_low", "stuck_high", "random"][
+        int(rng.integers(0, 4))
+    ]
+    return {
+        "seed": seed,
+        "grid_size": GRID_SIZE,
+        "corrupt_size": int(rng.integers(18, 52)),
+        "corrupt_x": int(rng.integers(8, GRID_SIZE - 60)),
+        "corrupt_y": int(rng.integers(8, GRID_SIZE - 60)),
+        "hologram_mode": hologram_mode,
+        "distributed_stride": int(rng.integers(10, 18)),
+        "phase_sigma": float(rng.uniform(0.08, 0.28)),
+        "correction_success_rate": float(rng.uniform(0.45, 0.9)),
+        "residual_noise_sigma": float(rng.uniform(0.0, 0.02)),
+        "oomphlap_bits": [int(x) for x in rng.integers(0, 2, 3)],
+        "oomphlap_sigma": float(rng.uniform(0.01, 0.08)),
+        "oomphlap_crosstalk": float(rng.uniform(0.0, 0.12)),
+        "oomphlap_verify_margin": float(rng.uniform(0.03, 0.08)),
+        "oomphlap_channel_failure": channel_failure,
+        "oomphlap_retry_success_rate": float(rng.uniform(0.45, 0.85)),
+        "graph_cycles": int(rng.integers(2, 6)),
+        "graph_degrade_fraction": float(rng.uniform(0.10, 0.24)),
+        "graph_fidelity_drop": float(rng.uniform(0.05, 0.16)),
+        "graph_stale_increment": float(rng.uniform(8.0, 20.0)),
+        "graph_adversarial_hubs": int(rng.integers(6, 18)),
+        "graph_remaining_critical_limit": float(rng.uniform(0.03, 0.08)),
+        "graph_repair_backlog_limit": float(rng.uniform(0.18, 0.30)),
+    }
+
+
+def _mix_channels(values, crosstalk):
+    n_ch = len(values)
+    mixed = []
+    for i in range(n_ch):
+        retained = values[i] * (1.0 - crosstalk)
+        bleed = 0.0
+        for j in range(n_ch):
+            if i == j:
+                continue
+            bleed += values[j] * (crosstalk / (n_ch - 1))
+        mixed.append(retained + bleed)
+    return mixed
+
+
+def _decode_oomphlap(bits, scenario, enable_verify, enable_correction_write):
+    rng = np.random.default_rng(scenario["seed"] + 1001)
+    ideal_levels = [MLC_LEVELS[b * 3] for b in bits]
+    mixed_levels = _mix_channels(ideal_levels, scenario["oomphlap_crosstalk"])
+    noisy_levels = [
+        float(np.clip(x + rng.normal(0, scenario["oomphlap_sigma"]), 0.0, 1.0))
+        for x in mixed_levels
+    ]
+
+    failure_mode = scenario["oomphlap_channel_failure"]
+    if failure_mode != "none":
+        failed_channel = int(rng.integers(0, len(noisy_levels)))
+        if failure_mode == "stuck_low":
+            noisy_levels[failed_channel] = 0.0
+        elif failure_mode == "stuck_high":
+            noisy_levels[failed_channel] = 1.0
+        else:
+            noisy_levels[failed_channel] = float(rng.random())
+    else:
+        failed_channel = None
+
+    decoded = [1 if x >= GST_THRESHOLD else 0 for x in noisy_levels]
+    verify_flag = enable_verify and (
+        min(abs(x - GST_THRESHOLD) for x in noisy_levels) < scenario["oomphlap_verify_margin"]
+        or failure_mode != "none"
+    )
+
+    final_bits = list(decoded)
+    if final_bits != bits and verify_flag and enable_correction_write:
+        retry_rng = np.random.default_rng(scenario["seed"] + 2001)
+        if retry_rng.random() < scenario["oomphlap_retry_success_rate"]:
+            final_bits = list(bits)
+
+    success = final_bits == bits
+    if success:
+        failure_reason = "none"
+    elif not enable_verify:
+        failure_reason = "verify_disabled_oomphlap"
+    elif not verify_flag:
+        failure_reason = "verify_missed_oomphlap"
+    elif not enable_correction_write:
+        failure_reason = "correction_write_disabled_oomphlap"
+    else:
+        failure_reason = "oomphlap_retry_failed"
+
+    return {
+        "target_bits": list(bits),
+        "decoded_bits": decoded,
+        "final_bits": final_bits,
+        "channel_failure": failure_mode,
+        "failed_channel": failed_channel,
+        "verify_flag": bool(verify_flag),
+        "success": bool(success),
+        "failure_reason": failure_reason,
+    }
+
+
+def _apply_hologram_perturbation(holo_clean, scenario):
+    rng = np.random.default_rng(scenario["seed"] + 3001)
+    mode = scenario["hologram_mode"]
+    if mode == "block_dropout":
+        return corrupt_hologram(
+            holo_clean,
+            scenario["corrupt_x"],
+            scenario["corrupt_y"],
+            scenario["corrupt_size"],
+            scenario["corrupt_size"],
+        )
+
+    if mode == "distributed_dropout":
+        perturbed = holo_clean.copy()
+        patch = max(3, scenario["corrupt_size"] // 8)
+        stride = scenario["distributed_stride"]
+        for y in range(0, holo_clean.shape[0] - patch, stride):
+            for x in range(0, holo_clean.shape[1] - patch, stride):
+                if rng.random() < 0.55:
+                    perturbed[y:y+patch, x:x+patch] = 0.0
+        return perturbed
+
+    noise = rng.normal(0.0, scenario["phase_sigma"], holo_clean.shape)
+    phase_field = np.exp(1j * noise)
+    perturbed = np.real(holo_clean.astype(complex) * phase_field)
+    return np.clip(normalize_field(perturbed), 0.0, 1.0)
+
+
+def _partially_correct_hologram(holo_clean, holo_corrupt, scenario):
+    rng = np.random.default_rng(scenario["seed"] + 4001)
+    corrected = holo_corrupt.copy()
+    diff_mask = np.abs(holo_clean - holo_corrupt) > 1e-6
+    repair_mask = diff_mask & (
+        rng.random(holo_clean.shape) < scenario["correction_success_rate"]
+    )
+    corrected[repair_mask] = holo_clean[repair_mask]
+
+    residual_sigma = scenario["residual_noise_sigma"]
+    if residual_sigma > 0:
+        corrected = np.clip(
+            corrected + rng.normal(0.0, residual_sigma, corrected.shape),
+            0.0,
+            1.0,
+        )
+    return corrected
+
+
+def _count_critical_nodes(G):
+    return sum(
+        1
+        for node in G.nodes()
+        if (
+            G.nodes[node]["stale_time"] > THRESH_STALE
+            and G.nodes[node]["fidelity"] < THRESH_FIDELITY
+            and G.nodes[node]["centrality"] < THRESH_ORPHAN
+        )
+    )
+
+
+def _repair_nodes(G, repair_nodes, cycle_rng):
+    for node in repair_nodes:
+        G.nodes[node]["fidelity"] = min(
+            1.0,
+            G.nodes[node]["fidelity"] + cycle_rng.uniform(0.20, 0.45),
+        )
+        G.nodes[node]["stale_time"] = max(
+            0.0,
+            G.nodes[node]["stale_time"] - cycle_rng.uniform(8.0, 20.0),
+        )
+
+
+def _stress_memory_graph(scenario, enable_consolidate_bleach):
+    G = build_memory_graph(NUM_MEM_NODES)
+    rng = np.random.default_rng(scenario["seed"] + 5001)
+    hubs = sorted(
+        G.nodes(),
+        key=lambda node: G.nodes[node]["centrality"],
+        reverse=True,
+    )[: scenario["graph_adversarial_hubs"]]
+
+    for cycle in range(scenario["graph_cycles"]):
+        nodes = list(G.nodes())
+        if not nodes:
+            break
+
+        degrade_count = max(1, int(len(nodes) * scenario["graph_degrade_fraction"]))
+        degrade_targets = rng.choice(
+            nodes,
+            size=min(degrade_count, len(nodes)),
+            replace=False,
+        )
+        for node in degrade_targets:
+            G.nodes[node]["fidelity"] = max(
+                0.0,
+                G.nodes[node]["fidelity"] - scenario["graph_fidelity_drop"],
+            )
+            G.nodes[node]["stale_time"] = min(
+                100.0,
+                G.nodes[node]["stale_time"] + scenario["graph_stale_increment"],
+            )
+
+        for node in hubs:
+            if node in G:
+                G.nodes[node]["fidelity"] = min(G.nodes[node]["fidelity"], 0.2)
+                G.nodes[node]["stale_time"] = max(
+                    G.nodes[node]["stale_time"],
+                    95.0,
+                )
+
+        if enable_consolidate_bleach:
+            bleach, repair, _ = consolidate(G)
+            _repair_nodes(G, repair, rng)
+            if bleach:
+                G.remove_nodes_from(bleach)
+            if len(G) > 1:
+                cent = nx.degree_centrality(G)
+                for node in G.nodes():
+                    G.nodes[node]["centrality"] = cent[node]
+
+    surviving_nodes = max(1, G.number_of_nodes())
+    remaining_critical = _count_critical_nodes(G)
+    repair_backlog = sum(
+        1
+        for node in G.nodes()
+        if (
+            G.nodes[node]["fidelity"] < THRESH_FIDELITY
+            and G.nodes[node]["centrality"] >= THRESH_ORPHAN
+        )
+    )
+    critical_ratio = remaining_critical / surviving_nodes
+    repair_backlog_ratio = repair_backlog / surviving_nodes
+    graph_success = (
+        critical_ratio <= scenario["graph_remaining_critical_limit"]
+        and repair_backlog_ratio <= scenario["graph_repair_backlog_limit"]
+    )
+
+    if graph_success:
+        failure_reason = "none"
+    elif not enable_consolidate_bleach:
+        failure_reason = "graph_maintenance_disabled"
+    elif critical_ratio > scenario["graph_remaining_critical_limit"]:
+        failure_reason = "critical_node_backlog"
+    else:
+        failure_reason = "repair_backlog"
+
+    return {
+        "surviving_nodes": surviving_nodes,
+        "remaining_critical": remaining_critical,
+        "critical_ratio": critical_ratio,
+        "repair_backlog_ratio": repair_backlog_ratio,
+        "success": bool(graph_success),
+        "failure_reason": failure_reason,
+    }
+
+
+def simulate_pipeline_trial(
+    scenario,
+    enable_verify=True,
+    enable_correction_write=True,
+    enable_consolidate_bleach=True,
+):
+    """
+    Run one deterministic end-to-end trial under one hostile scenario.
+
+    Returns a dict of stage metrics plus explicit failure reasons so the
+    benchmark can characterize where the pipeline breaks, not just whether it
+    happened to pass.
+    """
+    data = create_data_pattern(scenario["grid_size"], scenario["seed"])
+    holo_clean = encode_hologram(data)
+    rec_clean = reconstruct(holo_clean)
+    holo_corrupt = _apply_hologram_perturbation(holo_clean, scenario)
+    rec_corrupt = reconstruct(holo_corrupt)
+    score_before, _, intact_before = verify_fidelity(rec_clean, rec_corrupt)
+
+    if enable_verify and not intact_before and enable_correction_write:
+        holo_final = _partially_correct_hologram(holo_clean, holo_corrupt, scenario)
+    else:
+        holo_final = holo_corrupt
+
+    rec_final = reconstruct(holo_final)
+    score_after, _, intact_after = verify_fidelity(rec_clean, rec_final)
+
+    if intact_after:
+        hologram_failure = "none"
+    elif not enable_verify:
+        hologram_failure = "verify_disabled_hologram"
+    elif intact_before:
+        hologram_failure = "verify_missed_hologram"
+    elif not enable_correction_write:
+        hologram_failure = "correction_write_disabled_hologram"
+    else:
+        hologram_failure = "partial_hologram_correction_failure"
+
+    oomphlap_result = _decode_oomphlap(
+        scenario["oomphlap_bits"],
+        scenario,
+        enable_verify=enable_verify,
+        enable_correction_write=enable_correction_write,
+    )
+    graph_result = _stress_memory_graph(
+        scenario,
+        enable_consolidate_bleach=enable_consolidate_bleach,
+    )
+
+    stage_failures = [
+        reason
+        for reason in (
+            hologram_failure,
+            oomphlap_result["failure_reason"],
+            graph_result["failure_reason"],
+        )
+        if reason != "none"
+    ]
+    overall_success = int(
+        intact_after and oomphlap_result["success"] and graph_result["success"]
+    )
+    primary_failure = "none"
+    if stage_failures:
+        primary_failure = (
+            stage_failures[0] if len(stage_failures) == 1 else "multi_stage_failure"
+        )
+
+    return {
+        "hologram_mode": scenario["hologram_mode"],
+        "ssim_before": float(score_before),
+        "ssim_after": float(score_after),
+        "hologram_success": int(intact_after),
+        "oomphlap_success": int(oomphlap_result["success"]),
+        "graph_success": int(graph_result["success"]),
+        "graph_critical_ratio": float(graph_result["critical_ratio"]),
+        "graph_repair_backlog_ratio": float(graph_result["repair_backlog_ratio"]),
+        "remaining_critical_nodes": int(graph_result["remaining_critical"]),
+        "surviving_nodes": int(graph_result["surviving_nodes"]),
+        "overall_success": overall_success,
+        "failure_reason": primary_failure,
+        "failure_detail": ",".join(stage_failures) if stage_failures else "none",
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # VISUALIZATION
 # ─────────────────────────────────────────────────────────────────────────────

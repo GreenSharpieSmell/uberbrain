@@ -372,13 +372,36 @@ class TestAdversarial:
 
 
 class TestRunMatrixClaimRigor:
-    def test_c4_reports_unmodeled_ablations_explicitly(self):
+    def test_restrict_config_to_claim_disables_other_claims(self):
+        run_matrix = _load_run_matrix()
+        config = {
+            "claims": {
+                "c1_sim1_verify": {"enabled": True},
+                "c2_sim2_oomphlap": {"enabled": True},
+                "c3_sim3_consolicant": {"enabled": True},
+                "c4_sim4_pipeline": {"enabled": True},
+            }
+        }
+
+        run_matrix.restrict_config_to_claim(config, "c4")
+
+        assert config["claims"]["c1_sim1_verify"]["enabled"] is False
+        assert config["claims"]["c2_sim2_oomphlap"]["enabled"] is False
+        assert config["claims"]["c3_sim3_consolicant"]["enabled"] is False
+        assert config["claims"]["c4_sim4_pipeline"]["enabled"] is True
+
+    def test_c4_reports_all_ablations_and_failure_accounting(self):
         run_matrix = _load_run_matrix()
         rows = run_matrix.run_claim_c4({"run": {"seed": 42, "trials": 6}})
         summary = rows[-1]
+        trial_row = rows[0]
 
         assert summary["claim"] == "c4_sim4_pipeline"
-        assert summary["modeled_ablation_count"] == 2
+        assert summary["modeled_ablation_count"] == 3
         assert summary["declared_ablation_count"] == 3
-        assert summary["all_ablations_modeled"] == 0.0
+        assert summary["all_ablations_modeled"] == 1.0
         assert "uplift_vs_modeled_ablations" in summary
+        assert "pipeline_failure_rate" in summary
+        assert "failure_count_multi_stage" in summary
+        assert "uplift_vs_no_consolidate_bleach" in summary
+        assert "failure_detail_full" in trial_row

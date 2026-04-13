@@ -31,6 +31,7 @@ def load_module(name: str, relpath: str):
 sim1 = load_module("sim1_holographic", "sim/sim1_holographic.py")
 sim2 = load_module("sim2_oomphlap", "sim/sim2_oomphlap.py")
 sim3 = load_module("sim3_consolicant", "sim/sim3_consolicant.py")
+sim4 = load_module("sim4_pipeline", "sim/sim4_pipeline.py")
 
 
 def test_sim1_corruption_triggers_degradation_at_default_region():
@@ -120,3 +121,46 @@ def test_sim3_consolidation_partitions_every_node_and_bleach_rule_holds():
         assert data["stale_time"] > sim3.THRESH_STALE
         assert data["fidelity"] < sim3.THRESH_FIDELITY
         assert data["centrality"] < sim3.THRESH_ORPHAN
+
+
+def test_sim4_trial_reports_failure_fields():
+    scenario = sim4.sample_pipeline_scenario(42)
+    result = sim4.simulate_pipeline_trial(scenario)
+
+    assert "overall_success" in result
+    assert "failure_reason" in result
+    assert "failure_detail" in result
+    assert "graph_critical_ratio" in result
+    assert "graph_repair_backlog_ratio" in result
+    assert result["failure_reason"]
+    assert result["failure_detail"]
+
+
+def test_sim4_no_consolidate_worsens_graph_health_under_stress():
+    scenario = sim4.sample_pipeline_scenario(123)
+    scenario.update({
+        "graph_cycles": 5,
+        "graph_degrade_fraction": 0.24,
+        "graph_fidelity_drop": 0.16,
+        "graph_stale_increment": 20.0,
+        "graph_adversarial_hubs": 16,
+    })
+
+    full = sim4.simulate_pipeline_trial(
+        scenario,
+        enable_verify=True,
+        enable_correction_write=True,
+        enable_consolidate_bleach=True,
+    )
+    no_consolidate = sim4.simulate_pipeline_trial(
+        scenario,
+        enable_verify=True,
+        enable_correction_write=True,
+        enable_consolidate_bleach=False,
+    )
+
+    assert full["graph_critical_ratio"] <= no_consolidate["graph_critical_ratio"] + 1e-9
+    assert (
+        full["graph_repair_backlog_ratio"]
+        <= no_consolidate["graph_repair_backlog_ratio"] + 1e-9
+    )

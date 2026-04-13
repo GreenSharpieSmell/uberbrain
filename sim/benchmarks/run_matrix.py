@@ -94,6 +94,28 @@ def _load_sim(name: str, relpath: str):
     return mod
 
 
+def restrict_config_to_claim(config: Dict[str, Any], claim_key: str) -> None:
+    """
+    Disable non-selected claim blocks for focused runs.
+
+    This keeps --claim honest: only the requested claim is executed and only that
+    claim's gates are evaluated. Everything else is intentionally marked disabled
+    instead of failing as "missing evidence."
+    """
+    key_to_id = {
+        "c1": "c1_sim1_verify",
+        "c2": "c2_sim2_oomphlap",
+        "c3": "c3_sim3_consolicant",
+        "c4": "c4_sim4_pipeline",
+    }
+    selected_claim_id = key_to_id.get(claim_key)
+    if selected_claim_id is None:
+        raise ValueError(f"Unknown claim key: {claim_key}")
+
+    for claim_id, claim_cfg in config.get("claims", {}).items():
+        claim_cfg["enabled"] = claim_id == selected_claim_id
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # CLAIM RUNNERS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -359,98 +381,177 @@ def run_claim_c3(config: Dict[str, Any]) -> list[dict]:
 
 def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     """
-    C4: sim4_pipeline — full pipeline with ablations.
+    C4: sim4_pipeline - failure-first end-to-end benchmark.
 
-    Ablations tested:
-    - no_verify: skip VERIFY, never correct
-    - no_correction_write: VERIFY runs but correction WRITE is skipped
-    - no_consolidate_bleach: CONSOLIDATE never runs
-
-    Metric: end-to-end SSIM after pipeline vs each ablation.
+    Runs the full pipeline and every declared ablation against the same sampled
+    hostile scenario. Records both whether the trial succeeded and why it failed
+    so the benchmark can characterize the envelope of failure, not just count
+    green runs.
     """
-    from skimage.metrics import structural_similarity as ssim_fn
-    sim1 = _load_sim("sim1_holographic", "sim/sim1_holographic.py")
-    sim3 = _load_sim("sim3_consolicant", "sim/sim3_consolicant.py")
+    sim4 = _load_sim("sim4_pipeline", "sim/sim4_pipeline.py")
 
-    run_cfg  = config.get("run", {})
-    seed     = run_cfg.get("seed", 42)
-    n_trials = min(run_cfg.get("trials", 200), 50)  # Limit for speed
+    run_cfg = config.get("run", {})
+    seed = run_cfg.get("seed", 42)
+    n_trials = min(run_cfg.get("trials", 200), 50)
 
     rows = []
-    modeled_ablations = {"no_verify", "no_correction_write"}
+    modeled_ablations = {
+        "no_verify",
+        "no_correction_write",
+        "no_consolidate_bleach",
+    }
     declared_ablations = {
         "no_verify",
         "no_correction_write",
         "no_consolidate_bleach",
     }
-    data         = sim1.create_data_pattern(sim1.GRID_SIZE, seed)
-    holo_clean,_ = sim1.encode_hologram(data)
-    rec_clean    = sim1.reconstruct(holo_clean)
+    full_successes = []
+    no_verify_successes = []
+    no_correction_successes = []
+    no_consolidate_successes = []
+    failure_counts: Dict[str, int] = {}
 
     for trial in range(n_trials):
-        rng  = np.random.default_rng(seed + trial)
-        size = int(rng.integers(20, 80))
-        cx   = int(rng.integers(10, sim1.GRID_SIZE - size - 10))
-        cy   = int(rng.integers(10, sim1.GRID_SIZE - size - 10))
+        scenario = sim4.sample_pipeline_scenario(seed + trial)
+        full = sim4.simulate_pipeline_trial(
+            scenario,
+            enable_verify=True,
+            enable_correction_write=True,
+            enable_consolidate_bleach=True,
+        )
+        no_verify = sim4.simulate_pipeline_trial(
+            scenario,
+            enable_verify=False,
+            enable_correction_write=False,
+            enable_consolidate_bleach=True,
+        )
+        no_correction = sim4.simulate_pipeline_trial(
+            scenario,
+            enable_verify=True,
+            enable_correction_write=False,
+            enable_consolidate_bleach=True,
+        )
+        no_consolidate = sim4.simulate_pipeline_trial(
+            scenario,
+            enable_verify=True,
+            enable_correction_write=True,
+            enable_consolidate_bleach=False,
+        )
 
-        holo_corrupt = sim1.corrupt_hologram(holo_clean, cx, cy, size, size)
-        rec_corrupt  = sim1.reconstruct(holo_corrupt)
-        ssim_corrupt, _, intact, _ = sim1.verify_fidelity(rec_clean, rec_corrupt)
+        full_successes.append(full["overall_success"])
+        no_verify_successes.append(no_verify["overall_success"])
+        no_correction_successes.append(no_correction["overall_success"])
+        no_consolidate_successes.append(no_consolidate["overall_success"])
 
-        # Full pipeline: VERIFY → WRITE correction if degraded
-        if not intact:
-            residual    = rng.normal(0, 0.03, holo_clean.shape)
-            holo_fixed  = np.clip(holo_clean + residual, 0, 1)
-            rec_pipeline = sim1.reconstruct(holo_fixed)
-        else:
-            rec_pipeline = rec_corrupt
-
-        ssim_pipeline, _, _, _ = sim1.verify_fidelity(rec_clean, rec_pipeline)
-
-        # Ablation 1: no_verify — always use corrupted reconstruction
-        ssim_no_verify = float(ssim_fn(rec_clean, rec_corrupt, data_range=1.0))
-
-        # Ablation 2: no_correction_write — VERIFY runs but no fix applied
-        ssim_no_correct = float(ssim_fn(rec_clean, rec_corrupt, data_range=1.0))
-
-        # Ablation 3: no_consolidate — pipeline runs but memory graph grows unbounded
-        # (modeled as full pipeline SSIM — same result, but regret accumulates)
-        ssim_no_consolidate = float(ssim_pipeline)
+        if full["failure_reason"] != "none":
+            failure_counts[full["failure_reason"]] = (
+                failure_counts.get(full["failure_reason"], 0) + 1
+            )
 
         rows.append({
-            "claim":              "c4_sim4_pipeline",
-            "trial":              trial,
-            "corrupt_size":       size,
-            "ssim_corrupt":       round(float(ssim_corrupt), 6),
-            "ssim_pipeline":      round(float(ssim_pipeline), 6),
-            "ssim_no_verify":     round(ssim_no_verify, 6),
-            "ssim_no_correct":    round(ssim_no_correct, 6),
-            "uplift_vs_no_verify": round(float(ssim_pipeline) - ssim_no_verify, 6),
-            "uplift_vs_no_correction_write": round(
-                float(ssim_pipeline) - ssim_no_correct, 6
+            "claim": "c4_sim4_pipeline",
+            "trial": trial,
+            "scenario_seed": seed + trial,
+            "hologram_mode": scenario["hologram_mode"],
+            "corrupt_size": scenario["corrupt_size"],
+            "pipeline_success": int(full["overall_success"]),
+            "no_verify_success": int(no_verify["overall_success"]),
+            "no_correction_write_success": int(no_correction["overall_success"]),
+            "no_consolidate_bleach_success": int(no_consolidate["overall_success"]),
+            "ssim_pipeline": round(float(full["ssim_after"]), 6),
+            "ssim_no_verify": round(float(no_verify["ssim_after"]), 6),
+            "ssim_no_correction_write": round(float(no_correction["ssim_after"]), 6),
+            "ssim_no_consolidate_bleach": round(
+                float(no_consolidate["ssim_after"]),
+                6,
+            ),
+            "graph_critical_ratio_pipeline": round(
+                float(full["graph_critical_ratio"]),
+                6,
+            ),
+            "graph_critical_ratio_no_consolidate_bleach": round(
+                float(no_consolidate["graph_critical_ratio"]),
+                6,
+            ),
+            "failure_reason_full": full["failure_reason"],
+            "failure_detail_full": full["failure_detail"],
+            "failure_reason_no_verify": no_verify["failure_reason"],
+            "failure_reason_no_correction_write": no_correction["failure_reason"],
+            "failure_reason_no_consolidate_bleach": no_consolidate["failure_reason"],
+            "uplift_vs_no_verify": float(
+                full["overall_success"] - no_verify["overall_success"]
+            ),
+            "uplift_vs_no_correction_write": float(
+                full["overall_success"] - no_correction["overall_success"]
+            ),
+            "uplift_vs_no_consolidate_bleach": float(
+                full["overall_success"] - no_consolidate["overall_success"]
             ),
         })
 
-    # Compute summary metrics for YAML gates
     unmodeled_ablations = sorted(declared_ablations - modeled_ablations)
-    mean_uplift_no_verify = bench_metrics.mean(
-        [r["uplift_vs_no_verify"] for r in rows]
+    full_success_rate = bench_metrics.mean(full_successes)
+    no_verify_success_rate = bench_metrics.mean(no_verify_successes)
+    no_correction_success_rate = bench_metrics.mean(no_correction_successes)
+    no_consolidate_success_rate = bench_metrics.mean(no_consolidate_successes)
+
+    mean_uplift_no_verify = full_success_rate - no_verify_success_rate
+    mean_uplift_no_correct = full_success_rate - no_correction_success_rate
+    mean_uplift_no_consolidate = (
+        full_success_rate - no_consolidate_success_rate
     )
-    mean_uplift_no_correct = bench_metrics.mean(
-        [r["uplift_vs_no_correction_write"] for r in rows]
+    min_modeled_uplift = min(
+        mean_uplift_no_verify,
+        mean_uplift_no_correct,
+        mean_uplift_no_consolidate,
     )
-    min_modeled_uplift = min(mean_uplift_no_verify, mean_uplift_no_correct)
-    n_success      = sum(1 for r in rows if r["ssim_pipeline"] >= 0.90)
-    min_success    = n_success / len(rows) if rows else 0.0
 
     rows.append({
-        "claim":                     "c4_sim4_pipeline",
+        "claim": "c4_sim4_pipeline",
+        "full_success_rate": round(full_success_rate, 6),
+        "no_verify_success_rate": round(no_verify_success_rate, 6),
+        "no_correction_write_success_rate": round(
+            no_correction_success_rate,
+            6,
+        ),
+        "no_consolidate_bleach_success_rate": round(
+            no_consolidate_success_rate,
+            6,
+        ),
         "uplift_vs_modeled_ablations": round(min_modeled_uplift, 6),
-        "min_success_rate":           round(min_success, 6),
-        "modeled_ablation_count":     len(modeled_ablations),
-        "declared_ablation_count":    len(declared_ablations),
-        "all_ablations_modeled":      1.0 if not unmodeled_ablations else 0.0,
-        "n_trials":                   len(rows),
+        "uplift_vs_no_verify": round(mean_uplift_no_verify, 6),
+        "uplift_vs_no_correction_write": round(mean_uplift_no_correct, 6),
+        "uplift_vs_no_consolidate_bleach": round(
+            mean_uplift_no_consolidate,
+            6,
+        ),
+        "min_success_rate": round(full_success_rate, 6),
+        "pipeline_failure_rate": round(1.0 - full_success_rate, 6),
+        "failure_count_multi_stage": int(
+            failure_counts.get("multi_stage_failure", 0)
+        ),
+        "failure_count_verify_missed_hologram": int(
+            failure_counts.get("verify_missed_hologram", 0)
+        ),
+        "failure_count_partial_hologram_correction_failure": int(
+            failure_counts.get("partial_hologram_correction_failure", 0)
+        ),
+        "failure_count_verify_missed_oomphlap": int(
+            failure_counts.get("verify_missed_oomphlap", 0)
+        ),
+        "failure_count_oomphlap_retry_failed": int(
+            failure_counts.get("oomphlap_retry_failed", 0)
+        ),
+        "failure_count_critical_node_backlog": int(
+            failure_counts.get("critical_node_backlog", 0)
+        ),
+        "failure_count_repair_backlog": int(
+            failure_counts.get("repair_backlog", 0)
+        ),
+        "modeled_ablation_count": len(modeled_ablations),
+        "declared_ablation_count": len(declared_ablations),
+        "all_ablations_modeled": 1.0 if not unmodeled_ablations else 0.0,
+        "n_trials": n_trials,
     })
 
     return rows
@@ -561,6 +662,8 @@ def main() -> int:
         config["run"]["seed"] = args.seed
     if args.run_id is not None:
         config["_resolved_run_id"] = args.run_id
+    if args.claim is not None:
+        restrict_config_to_claim(config, args.claim)
 
     run_id  = config["_resolved_run_id"]
     out_dir = config["_resolved_output_dir"]
