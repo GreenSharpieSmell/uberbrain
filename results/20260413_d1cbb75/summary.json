@@ -1,0 +1,76 @@
+{
+  "run_id": "20260413_d1cbb75",
+  "git_sha": "d1cbb75",
+  "claims": {
+    "c4_sim4_pipeline": {
+      "metrics": {
+        "full_success_rate": 0.55,
+        "no_verify_success_rate": 0.45,
+        "no_correction_write_success_rate": 0.45,
+        "no_consolidate_bleach_success_rate": 0.0,
+        "uplift_vs_modeled_ablations": 0.1,
+        "uplift_vs_no_verify": 0.1,
+        "uplift_vs_no_correction_write": 0.1,
+        "uplift_vs_no_consolidate_bleach": 0.55,
+        "min_success_rate": 0.55,
+        "pipeline_failure_rate": 0.45,
+        "avg_hologram_damage_fraction": 0.014322,
+        "avg_hologram_missing_fraction": 1.8e-05,
+        "avg_hologram_severity_score": 0.082031,
+        "avg_hologram_geometry_score": 0.687263,
+        "avg_hologram_damage_cluster_count": 17.45,
+        "avg_hologram_largest_cluster_share": 0.667372,
+        "avg_hologram_largest_cluster_bbox_fraction": 0.008176,
+        "avg_hologram_largest_cluster_fill_ratio": 0.746936,
+        "avg_correction_attempts_used": 0.6,
+        "avg_correction_focus_strength": 0.368891,
+        "second_pass_usage_rate": 0.3,
+        "avg_first_pass_recovery_delta": 0.017169,
+        "avg_second_pass_recovery_delta": 0.049896,
+        "avg_total_recovery_delta": 0.067065,
+        "block_dropout_success_rate": 0.285714,
+        "distributed_dropout_success_rate": 0.5,
+        "phase_noise_success_rate": 0.857143,
+        "block_dropout_recovery_delta": 0.11272,
+        "distributed_dropout_recovery_delta": 0.092044,
+        "phase_noise_recovery_delta": 0.0,
+        "failure_count_multi_stage": 1,
+        "failure_count_verify_missed_hologram": 0,
+        "failure_count_partial_hologram_correction_failure": 5,
+        "failure_count_verify_missed_oomphlap": 0,
+        "failure_count_oomphlap_retry_failed": 3,
+        "failure_count_critical_node_backlog": 0,
+        "failure_count_repair_backlog": 0,
+        "modeled_ablation_count": 3,
+        "declared_ablation_count": 3,
+        "all_ablations_modeled": 1.0,
+        "n_trials": 20
+      },
+      "gates": {
+        "uplift_vs_modeled_ablations": {
+          "status": "PASS",
+          "reason": "0.100000 >= 0.0 \u2192 PASS",
+          "measured": 0.1,
+          "threshold": 0.0,
+          "op": ">="
+        },
+        "min_success_rate": {
+          "status": "FAIL",
+          "reason": "0.550000 >= 0.9 \u2192 FAIL",
+          "measured": 0.55,
+          "threshold": 0.9,
+          "op": ">="
+        },
+        "all_ablations_modeled": {
+          "status": "PASS",
+          "reason": "1.000000 == 1.0 \u2192 PASS",
+          "measured": 1.0,
+          "threshold": 1.0,
+          "op": "=="
+        }
+      },
+      "status": "FAIL"
+    }
+  },
+  "overall_status": "FAIL"
+}
