@@ -411,6 +411,10 @@ class TestRunMatrixClaimRigor:
         assert "focus_source_missing_rate" in summary
         assert "avg_hologram_focus_boundary_share" in summary
         assert "avg_hologram_focus_interior_share" in summary
+        assert "avg_hologram_threshold_gap_before_recovery" in summary
+        assert "avg_hologram_threshold_gap_after_recovery" in summary
+        assert "avg_hologram_threshold_gap_closed_fraction" in summary
+        assert "avg_failed_hologram_threshold_gap_after_recovery" in summary
         assert "threshold_crossing_recovery_rate" in summary
         assert "avg_rewrite_recovery_delta" in summary
         assert "avg_correction_interior_rewrite_fraction" in summary
@@ -421,6 +425,15 @@ class TestRunMatrixClaimRigor:
         assert "avg_correction_interior_rewrite_capture_rate" in summary
         assert "avg_correction_interior_selected_count" in summary
         assert "avg_total_recovery_delta" in summary
+        assert "avg_oomphlap_initial_bit_error_count" in summary
+        assert "avg_oomphlap_final_bit_error_count" in summary
+        assert "avg_oomphlap_min_threshold_distance" in summary
+        assert "oomphlap_verify_rate" in summary
+        assert "oomphlap_verify_margin_trigger_rate" in summary
+        assert "oomphlap_verify_channel_failure_trigger_rate" in summary
+        assert "oomphlap_retry_attempt_rate" in summary
+        assert "oomphlap_retry_success_rate_given_attempt" in summary
+        assert "avg_failed_oomphlap_retry_draw_minus_success_rate" in summary
         assert "block_dropout_success_rate" in summary
         assert "block_dropout_threshold_crossing_rate" in summary
         assert "failure_count_multi_stage" in summary
@@ -434,6 +447,9 @@ class TestRunMatrixClaimRigor:
         assert "hologram_focus_source" in trial_row
         assert "hologram_focus_boundary_share" in trial_row
         assert "hologram_focus_interior_share" in trial_row
+        assert "hologram_threshold_gap_before_recovery" in trial_row
+        assert "hologram_threshold_gap_after_recovery" in trial_row
+        assert "hologram_threshold_gap_closed_fraction" in trial_row
         assert "hologram_threshold_crossed_after_recovery" in trial_row
         assert "hologram_largest_cluster_share" in trial_row
         assert "correction_attempts_used" in trial_row
@@ -452,5 +468,16 @@ class TestRunMatrixClaimRigor:
         assert "correction_interior_selected_count" in trial_row
         assert "correction_rewrite_recovery_delta" in trial_row
         assert "correction_total_recovery_delta" in trial_row
+        assert "correction_best_stage" in trial_row
+        assert "oomphlap_initial_bit_error_count" in trial_row
+        assert "oomphlap_final_bit_error_count" in trial_row
+        assert "oomphlap_min_threshold_distance" in trial_row
+        assert "oomphlap_verify_flag" in trial_row
+        assert "oomphlap_verify_trigger_margin" in trial_row
+        assert "oomphlap_verify_trigger_channel_failure" in trial_row
+        assert "oomphlap_retry_attempted" in trial_row
+        assert "oomphlap_retry_succeeded" in trial_row
+        assert "oomphlap_retry_draw_minus_success_rate" in trial_row
         assert summary["avg_hologram_diff_count"] >= summary["avg_hologram_missing_count"]
         assert 0.0 <= summary["focus_source_missing_rate"] <= 1.0
+        assert 0.0 <= summary["oomphlap_retry_success_rate_given_attempt"] <= 1.0

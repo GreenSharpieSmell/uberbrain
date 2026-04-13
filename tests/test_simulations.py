@@ -144,6 +144,9 @@ def test_sim4_trial_reports_failure_fields():
     assert "hologram_largest_cluster_share" in result
     assert "hologram_focus_boundary_share" in result
     assert "hologram_focus_interior_share" in result
+    assert "hologram_threshold_gap_before_recovery" in result
+    assert "hologram_threshold_gap_after_recovery" in result
+    assert "hologram_threshold_gap_closed_fraction" in result
     assert "hologram_threshold_crossed_after_recovery" in result
     assert "correction_attempts_used" in result
     assert "correction_focus_strength" in result
@@ -161,6 +164,16 @@ def test_sim4_trial_reports_failure_fields():
     assert "correction_interior_selected_count" in result
     assert "correction_rewrite_recovery_delta" in result
     assert "correction_total_recovery_delta" in result
+    assert "correction_best_stage" in result
+    assert "oomphlap_initial_bit_error_count" in result
+    assert "oomphlap_final_bit_error_count" in result
+    assert "oomphlap_min_threshold_distance" in result
+    assert "oomphlap_verify_flag" in result
+    assert "oomphlap_verify_trigger_margin" in result
+    assert "oomphlap_verify_trigger_channel_failure" in result
+    assert "oomphlap_retry_attempted" in result
+    assert "oomphlap_retry_succeeded" in result
+    assert "oomphlap_retry_draw_minus_success_rate" in result
     assert result["failure_reason"]
     assert result["failure_detail"]
     assert result["hologram_damage_fraction"] >= 0.0
@@ -175,6 +188,9 @@ def test_sim4_trial_reports_failure_fields():
     assert 0.0 <= result["hologram_largest_cluster_share"] <= 1.0
     assert 0.0 <= result["hologram_focus_boundary_share"] <= 1.0
     assert 0.0 <= result["hologram_focus_interior_share"] <= 1.0
+    assert result["hologram_threshold_gap_before_recovery"] >= 0.0
+    assert result["hologram_threshold_gap_after_recovery"] >= 0.0
+    assert 0.0 <= result["hologram_threshold_gap_closed_fraction"] <= 1.0
     assert (
         result["hologram_focus_boundary_share"]
         + result["hologram_focus_interior_share"]
@@ -199,6 +215,16 @@ def test_sim4_trial_reports_failure_fields():
     assert result["correction_interior_selected_count"] <= result["correction_interior_candidate_count"]
     assert result["correction_rewrite_recovery_delta"] >= 0.0
     assert result["correction_total_recovery_delta"] >= 0.0
+    assert result["correction_best_stage"] in {"pre", "first_pass", "rewrite", "second_pass"}
+    assert result["oomphlap_initial_bit_error_count"] >= 0
+    assert result["oomphlap_final_bit_error_count"] >= 0
+    assert result["oomphlap_final_bit_error_count"] <= result["oomphlap_initial_bit_error_count"]
+    assert result["oomphlap_min_threshold_distance"] >= 0.0
+    assert result["oomphlap_verify_flag"] in {0, 1}
+    assert result["oomphlap_verify_trigger_margin"] in {0, 1}
+    assert result["oomphlap_verify_trigger_channel_failure"] in {0, 1}
+    assert result["oomphlap_retry_attempted"] in {0, 1}
+    assert result["oomphlap_retry_succeeded"] in {0, 1}
 
 
 def test_sim4_correction_path_never_lowers_best_hologram_score():
@@ -273,6 +299,59 @@ def test_sim4_block_dropout_falls_back_to_diff_geometry_when_missing_mask_collap
     assert damage["missing_count"] < max(4, int(np.ceil(0.05 * damage["diff_count"])))
     assert damage["focus_source"] == "diff_mask"
     assert damage["focus_interior_share"] > 0.0
+
+
+def test_sim4_oomphlap_retry_telemetry_reports_forced_failure():
+    scenario = sim4.sample_pipeline_scenario(42)
+    scenario.update({
+        "oomphlap_bits": [1, 1, 1],
+        "oomphlap_sigma": 0.0,
+        "oomphlap_crosstalk": 0.0,
+        "oomphlap_verify_margin": 0.01,
+        "oomphlap_channel_failure": "stuck_low",
+        "oomphlap_retry_success_rate": 0.0,
+    })
+
+    result = sim4.simulate_pipeline_trial(
+        scenario,
+        enable_verify=True,
+        enable_correction_write=True,
+        enable_consolidate_bleach=True,
+    )
+
+    assert result["oomphlap_verify_flag"] == 1
+    assert result["oomphlap_verify_trigger_channel_failure"] == 1
+    assert result["oomphlap_retry_attempted"] == 1
+    assert result["oomphlap_retry_succeeded"] == 0
+    assert result["oomphlap_initial_bit_error_count"] > 0
+    assert (
+        result["oomphlap_final_bit_error_count"]
+        == result["oomphlap_initial_bit_error_count"]
+    )
+
+
+def test_sim4_oomphlap_retry_telemetry_reports_forced_success():
+    scenario = sim4.sample_pipeline_scenario(42)
+    scenario.update({
+        "oomphlap_bits": [1, 1, 1],
+        "oomphlap_sigma": 0.0,
+        "oomphlap_crosstalk": 0.0,
+        "oomphlap_verify_margin": 0.01,
+        "oomphlap_channel_failure": "stuck_low",
+        "oomphlap_retry_success_rate": 1.0,
+    })
+
+    result = sim4.simulate_pipeline_trial(
+        scenario,
+        enable_verify=True,
+        enable_correction_write=True,
+        enable_consolidate_bleach=True,
+    )
+
+    assert result["oomphlap_verify_flag"] == 1
+    assert result["oomphlap_retry_attempted"] == 1
+    assert result["oomphlap_retry_succeeded"] == 1
+    assert result["oomphlap_final_bit_error_count"] == 0
 
 
 def test_sim4_block_dropout_geometry_is_more_clustered_than_distributed_dropout():

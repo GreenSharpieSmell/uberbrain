@@ -424,6 +424,10 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     focus_source_missing_flags = []
     focus_boundary_shares = []
     focus_interior_shares = []
+    threshold_gap_befores = []
+    threshold_gap_afters = []
+    threshold_gap_closed_fractions = []
+    failed_threshold_gap_afters = []
     focus_strengths = []
     rewrite_fractions = []
     boundary_rewrite_fractions = []
@@ -444,6 +448,16 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     rewrite_recovery_deltas = []
     second_pass_recovery_deltas = []
     total_recovery_deltas = []
+    oomphlap_initial_bit_errors = []
+    oomphlap_final_bit_errors = []
+    oomphlap_min_threshold_distances = []
+    oomphlap_verify_flags = []
+    oomphlap_verify_margin_flags = []
+    oomphlap_verify_channel_failure_flags = []
+    oomphlap_retry_attempt_flags = []
+    oomphlap_retry_success_flags = []
+    oomphlap_retry_draw_minus_success_rates = []
+    oomphlap_failed_retry_draw_minus_success_rates = []
     mode_metrics: Dict[str, Dict[str, list[float]]] = {
         "block_dropout": {"successes": [], "recovery_deltas": [], "threshold_crossings": []},
         "distributed_dropout": {"successes": [], "recovery_deltas": [], "threshold_crossings": []},
@@ -502,6 +516,19 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         )
         focus_boundary_shares.append(float(full["hologram_focus_boundary_share"]))
         focus_interior_shares.append(float(full["hologram_focus_interior_share"]))
+        threshold_gap_befores.append(
+            float(full["hologram_threshold_gap_before_recovery"])
+        )
+        threshold_gap_afters.append(
+            float(full["hologram_threshold_gap_after_recovery"])
+        )
+        threshold_gap_closed_fractions.append(
+            float(full["hologram_threshold_gap_closed_fraction"])
+        )
+        if not full["hologram_success"]:
+            failed_threshold_gap_afters.append(
+                float(full["hologram_threshold_gap_after_recovery"])
+            )
         focus_strengths.append(float(full["correction_focus_strength"]))
         rewrite_fractions.append(float(full["correction_rewrite_fraction"]))
         boundary_rewrite_fractions.append(
@@ -550,6 +577,29 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
             float(full["correction_second_pass_recovery_delta"])
         )
         total_recovery_deltas.append(float(full["correction_total_recovery_delta"]))
+        oomphlap_initial_bit_errors.append(
+            float(full["oomphlap_initial_bit_error_count"])
+        )
+        oomphlap_final_bit_errors.append(float(full["oomphlap_final_bit_error_count"]))
+        oomphlap_min_threshold_distances.append(
+            float(full["oomphlap_min_threshold_distance"])
+        )
+        oomphlap_verify_flags.append(float(full["oomphlap_verify_flag"]))
+        oomphlap_verify_margin_flags.append(
+            float(full["oomphlap_verify_trigger_margin"])
+        )
+        oomphlap_verify_channel_failure_flags.append(
+            float(full["oomphlap_verify_trigger_channel_failure"])
+        )
+        oomphlap_retry_attempt_flags.append(float(full["oomphlap_retry_attempted"]))
+        oomphlap_retry_success_flags.append(float(full["oomphlap_retry_succeeded"]))
+        oomphlap_retry_draw_minus_success_rates.append(
+            float(full["oomphlap_retry_draw_minus_success_rate"])
+        )
+        if full["oomphlap_retry_attempted"] and not full["oomphlap_retry_succeeded"]:
+            oomphlap_failed_retry_draw_minus_success_rates.append(
+                float(full["oomphlap_retry_draw_minus_success_rate"])
+            )
         threshold_crossings.append(float(full["hologram_threshold_crossed_after_recovery"]))
         mode_bucket = mode_metrics[scenario["hologram_mode"]]
         mode_bucket["successes"].append(float(full["overall_success"]))
@@ -626,6 +676,18 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["hologram_focus_interior_share"]),
                 6,
             ),
+            "hologram_threshold_gap_before_recovery": round(
+                float(full["hologram_threshold_gap_before_recovery"]),
+                6,
+            ),
+            "hologram_threshold_gap_after_recovery": round(
+                float(full["hologram_threshold_gap_after_recovery"]),
+                6,
+            ),
+            "hologram_threshold_gap_closed_fraction": round(
+                float(full["hologram_threshold_gap_closed_fraction"]),
+                6,
+            ),
             "hologram_threshold_crossed_after_recovery": int(
                 full["hologram_threshold_crossed_after_recovery"]
             ),
@@ -696,6 +758,30 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
                 float(full["correction_total_recovery_delta"]),
                 6,
             ),
+            "correction_best_stage": full["correction_best_stage"],
+            "oomphlap_initial_bit_error_count": int(
+                full["oomphlap_initial_bit_error_count"]
+            ),
+            "oomphlap_final_bit_error_count": int(
+                full["oomphlap_final_bit_error_count"]
+            ),
+            "oomphlap_min_threshold_distance": round(
+                float(full["oomphlap_min_threshold_distance"]),
+                6,
+            ),
+            "oomphlap_verify_flag": int(full["oomphlap_verify_flag"]),
+            "oomphlap_verify_trigger_margin": int(
+                full["oomphlap_verify_trigger_margin"]
+            ),
+            "oomphlap_verify_trigger_channel_failure": int(
+                full["oomphlap_verify_trigger_channel_failure"]
+            ),
+            "oomphlap_retry_attempted": int(full["oomphlap_retry_attempted"]),
+            "oomphlap_retry_succeeded": int(full["oomphlap_retry_succeeded"]),
+            "oomphlap_retry_draw_minus_success_rate": round(
+                float(full["oomphlap_retry_draw_minus_success_rate"]),
+                6,
+            ),
             "graph_critical_ratio_pipeline": round(
                 float(full["graph_critical_ratio"]),
                 6,
@@ -759,6 +845,17 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
     phase_threshold_crossing_rate = bench_metrics.mean(
         mode_metrics["phase_noise"]["threshold_crossings"]
     )
+    retry_attempt_count = sum(oomphlap_retry_attempt_flags)
+    retry_success_count = sum(oomphlap_retry_success_flags)
+    retry_success_rate_given_attempt = (
+        retry_success_count / retry_attempt_count if retry_attempt_count else 0.0
+    )
+    avg_failed_hologram_threshold_gap_after = bench_metrics.mean(
+        failed_threshold_gap_afters
+    )
+    avg_failed_retry_draw_minus_success_rate = bench_metrics.mean(
+        oomphlap_failed_retry_draw_minus_success_rates
+    )
 
     rows.append({
         "claim": "c4_sim4_pipeline",
@@ -817,6 +914,22 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         ),
         "avg_hologram_focus_interior_share": round(
             bench_metrics.mean(focus_interior_shares),
+            6,
+        ),
+        "avg_hologram_threshold_gap_before_recovery": round(
+            bench_metrics.mean(threshold_gap_befores),
+            6,
+        ),
+        "avg_hologram_threshold_gap_after_recovery": round(
+            bench_metrics.mean(threshold_gap_afters),
+            6,
+        ),
+        "avg_hologram_threshold_gap_closed_fraction": round(
+            bench_metrics.mean(threshold_gap_closed_fractions),
+            6,
+        ),
+        "avg_failed_hologram_threshold_gap_after_recovery": round(
+            avg_failed_hologram_threshold_gap_after,
             6,
         ),
         "avg_correction_attempts_used": round(
@@ -888,6 +1001,43 @@ def run_claim_c4(config: Dict[str, Any]) -> list[dict]:
         ),
         "avg_total_recovery_delta": round(
             bench_metrics.mean(total_recovery_deltas),
+            6,
+        ),
+        "avg_oomphlap_initial_bit_error_count": round(
+            bench_metrics.mean(oomphlap_initial_bit_errors),
+            6,
+        ),
+        "avg_oomphlap_final_bit_error_count": round(
+            bench_metrics.mean(oomphlap_final_bit_errors),
+            6,
+        ),
+        "avg_oomphlap_min_threshold_distance": round(
+            bench_metrics.mean(oomphlap_min_threshold_distances),
+            6,
+        ),
+        "oomphlap_verify_rate": round(bench_metrics.mean(oomphlap_verify_flags), 6),
+        "oomphlap_verify_margin_trigger_rate": round(
+            bench_metrics.mean(oomphlap_verify_margin_flags),
+            6,
+        ),
+        "oomphlap_verify_channel_failure_trigger_rate": round(
+            bench_metrics.mean(oomphlap_verify_channel_failure_flags),
+            6,
+        ),
+        "oomphlap_retry_attempt_rate": round(
+            bench_metrics.mean(oomphlap_retry_attempt_flags),
+            6,
+        ),
+        "oomphlap_retry_success_rate_given_attempt": round(
+            retry_success_rate_given_attempt,
+            6,
+        ),
+        "avg_oomphlap_retry_draw_minus_success_rate": round(
+            bench_metrics.mean(oomphlap_retry_draw_minus_success_rates),
+            6,
+        ),
+        "avg_failed_oomphlap_retry_draw_minus_success_rate": round(
+            avg_failed_retry_draw_minus_success_rate,
             6,
         ),
         "threshold_crossing_recovery_rate": round(

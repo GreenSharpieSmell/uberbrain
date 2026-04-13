@@ -304,16 +304,39 @@ def _decode_oomphlap(bits, scenario, enable_verify, enable_correction_write):
         failed_channel = None
 
     decoded = [1 if x >= GST_THRESHOLD else 0 for x in noisy_levels]
+    min_threshold_distance = float(
+        min(abs(x - GST_THRESHOLD) for x in noisy_levels)
+    )
+    verify_trigger_margin = (
+        min_threshold_distance < scenario["oomphlap_verify_margin"]
+    )
+    verify_trigger_channel_failure = failure_mode != "none"
     verify_flag = enable_verify and (
-        min(abs(x - GST_THRESHOLD) for x in noisy_levels) < scenario["oomphlap_verify_margin"]
-        or failure_mode != "none"
+        verify_trigger_margin or verify_trigger_channel_failure
+    )
+    initial_bit_error_count = int(
+        sum(int(decoded_bit != target_bit) for decoded_bit, target_bit in zip(decoded, bits))
     )
 
     final_bits = list(decoded)
-    if final_bits != bits and verify_flag and enable_correction_write:
+    retry_attempted = False
+    retry_succeeded = False
+    retry_draw = 0.0
+    retry_draw_minus_success_rate = 0.0
+    if initial_bit_error_count > 0 and verify_flag and enable_correction_write:
+        retry_attempted = True
         retry_rng = np.random.default_rng(scenario["seed"] + 2001)
-        if retry_rng.random() < scenario["oomphlap_retry_success_rate"]:
+        retry_draw = float(retry_rng.random())
+        retry_draw_minus_success_rate = float(
+            retry_draw - scenario["oomphlap_retry_success_rate"]
+        )
+        if retry_draw < scenario["oomphlap_retry_success_rate"]:
             final_bits = list(bits)
+            retry_succeeded = True
+
+    final_bit_error_count = int(
+        sum(int(final_bit != target_bit) for final_bit, target_bit in zip(final_bits, bits))
+    )
 
     success = final_bits == bits
     if success:
@@ -333,7 +356,16 @@ def _decode_oomphlap(bits, scenario, enable_verify, enable_correction_write):
         "final_bits": final_bits,
         "channel_failure": failure_mode,
         "failed_channel": failed_channel,
+        "initial_bit_error_count": initial_bit_error_count,
+        "final_bit_error_count": final_bit_error_count,
+        "min_threshold_distance": min_threshold_distance,
         "verify_flag": bool(verify_flag),
+        "verify_trigger_margin": bool(verify_trigger_margin),
+        "verify_trigger_channel_failure": bool(verify_trigger_channel_failure),
+        "retry_attempted": bool(retry_attempted),
+        "retry_succeeded": bool(retry_succeeded),
+        "retry_draw": retry_draw,
+        "retry_draw_minus_success_rate": retry_draw_minus_success_rate,
         "success": bool(success),
         "failure_reason": failure_reason,
     }
@@ -875,6 +907,29 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
     else:
         second_pass_score = float(best_score)
 
+    threshold_gap_before = max(0.0, float(FIDELITY_WARN - score_before))
+    threshold_gap_after = max(0.0, float(FIDELITY_WARN - best_score))
+    if threshold_gap_before > 0.0:
+        threshold_gap_closed_fraction = float(
+            np.clip(
+                (threshold_gap_before - threshold_gap_after) / threshold_gap_before,
+                0.0,
+                1.0,
+            )
+        )
+    else:
+        threshold_gap_closed_fraction = 0.0
+
+    stage_scores = [
+        ("pre", float(score_before)),
+        ("first_pass", float(first_pass_score)),
+    ]
+    if rewrite_applied:
+        stage_scores.append(("rewrite", float(rewrite_score)))
+    if used_second_pass:
+        stage_scores.append(("second_pass", float(second_pass_score)))
+    best_stage = max(stage_scores, key=lambda item: item[1])[0]
+
     return best_hologram, {
         "attempts_planned": attempts_planned,
         "attempts_used": attempts_used,
@@ -914,6 +969,7 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
         "rewrite_score": float(rewrite_score),
         "second_pass_score": float(second_pass_score),
         "final_score": float(best_score),
+        "best_stage": best_stage,
         "first_pass_recovery_delta": max(0.0, float(first_pass_score - score_before)),
         "rewrite_recovery_delta": max(
             0.0,
@@ -924,6 +980,9 @@ def _recover_hologram(holo_clean, holo_corrupt, rec_clean, score_before, scenari
             float(best_score - max(score_before, first_pass_score, rewrite_score)),
         ),
         "total_recovery_delta": max(0.0, float(best_score - score_before)),
+        "threshold_gap_before": threshold_gap_before,
+        "threshold_gap_after": threshold_gap_after,
+        "threshold_gap_closed_fraction": threshold_gap_closed_fraction,
         "threshold_crossed_after_recovery": int(
             score_before < FIDELITY_WARN and best_score >= FIDELITY_WARN
         ),
@@ -1102,10 +1161,14 @@ def simulate_pipeline_trial(
         "rewrite_score": float(score_before),
         "second_pass_score": float(score_before),
         "final_score": float(score_before),
+        "best_stage": "pre",
         "first_pass_recovery_delta": 0.0,
         "rewrite_recovery_delta": 0.0,
         "second_pass_recovery_delta": 0.0,
         "total_recovery_delta": 0.0,
+        "threshold_gap_before": max(0.0, float(FIDELITY_WARN - score_before)),
+        "threshold_gap_after": max(0.0, float(FIDELITY_WARN - score_before)),
+        "threshold_gap_closed_fraction": 0.0,
         "threshold_crossed_after_recovery": 0,
     }
 
@@ -1196,6 +1259,15 @@ def simulate_pipeline_trial(
         "hologram_focus_interior_share": float(
             correction_meta["focus_interior_share"]
         ),
+        "hologram_threshold_gap_before_recovery": float(
+            correction_meta["threshold_gap_before"]
+        ),
+        "hologram_threshold_gap_after_recovery": float(
+            correction_meta["threshold_gap_after"]
+        ),
+        "hologram_threshold_gap_closed_fraction": float(
+            correction_meta["threshold_gap_closed_fraction"]
+        ),
         "hologram_threshold_crossed_after_recovery": int(
             correction_meta["threshold_crossed_after_recovery"]
         ),
@@ -1243,6 +1315,7 @@ def simulate_pipeline_trial(
         "correction_first_pass_score": float(correction_meta["first_pass_score"]),
         "correction_rewrite_score": float(correction_meta["rewrite_score"]),
         "correction_second_pass_score": float(correction_meta["second_pass_score"]),
+        "correction_best_stage": correction_meta["best_stage"],
         "correction_total_recovery_delta": float(
             correction_meta["total_recovery_delta"]
         ),
@@ -1256,6 +1329,27 @@ def simulate_pipeline_trial(
             correction_meta["second_pass_recovery_delta"]
         ),
         "oomphlap_success": int(oomphlap_result["success"]),
+        "oomphlap_initial_bit_error_count": int(
+            oomphlap_result["initial_bit_error_count"]
+        ),
+        "oomphlap_final_bit_error_count": int(
+            oomphlap_result["final_bit_error_count"]
+        ),
+        "oomphlap_min_threshold_distance": float(
+            oomphlap_result["min_threshold_distance"]
+        ),
+        "oomphlap_verify_flag": int(oomphlap_result["verify_flag"]),
+        "oomphlap_verify_trigger_margin": int(
+            oomphlap_result["verify_trigger_margin"]
+        ),
+        "oomphlap_verify_trigger_channel_failure": int(
+            oomphlap_result["verify_trigger_channel_failure"]
+        ),
+        "oomphlap_retry_attempted": int(oomphlap_result["retry_attempted"]),
+        "oomphlap_retry_succeeded": int(oomphlap_result["retry_succeeded"]),
+        "oomphlap_retry_draw_minus_success_rate": float(
+            oomphlap_result["retry_draw_minus_success_rate"]
+        ),
         "graph_success": int(graph_result["success"]),
         "graph_critical_ratio": float(graph_result["critical_ratio"]),
         "graph_repair_backlog_ratio": float(graph_result["repair_backlog_ratio"]),
